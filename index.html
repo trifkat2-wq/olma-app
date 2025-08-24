@@ -283,19 +283,18 @@
         }
     }
 
-    // --- НОВЫЕ ФУНКЦИИ ДЛЯ РАБОТЫ С ЖУРНАЛОМ В FIREBASE ---
-    async function loadJournal() {
-        if (!currentUser) return;
+    async function loadJournal(user) {
+        if (!user) return;
         try {
-            const doc = await firestore.collection("journals").doc(currentUser).get();
+            const doc = await firestore.collection("journals").doc(user).get();
             if (doc.exists) {
-                journal = doc.data().entries || [];
+                return doc.data().entries || [];
             } else {
-                journal = [];
+                return [];
             }
         } catch (error) {
             console.error("Ошибка загрузки журнала:", error);
-            journal = [];
+            return [];
         }
     }
 
@@ -364,32 +363,27 @@
         });
         
         employees.forEach(emp => {
-            journal.unshift({
+            journal.push({ // ИЗМЕНЕНО: push вместо unshift
                 user: currentUser,
                 manager: manager,
                 employee: emp,
                 date: now
             });
         });
-        await saveJournal(); // Сохраняем в Firebase
+        await saveJournal();
     }
     
-    function renderJournal(filters = {}) {
+    function renderJournal(journalData) {
         const body = document.getElementById("journalBody");
         body.innerHTML = "";
-        let filteredJournal = [...journal];
 
-        if (filters.user && filters.user !== 'all') {
-            // Эта фильтрация теперь происходит при загрузке, но оставим на всякий случай
-        }
-
-        if (filteredJournal.length === 0) {
+        if (journalData.length === 0) {
             body.innerHTML = "<p class='muted' style='text-align:center;'>Записей в журнале нет</p>";
             return;
         }
 
         const groupedByDate = {};
-        filteredJournal.forEach(entry => {
+        journalData.forEach(entry => {
             const dateKey = entry.date.split(',')[0]; 
             if (!groupedByDate[dateKey]) groupedByDate[dateKey] = [];
             groupedByDate[dateKey].push(entry);
@@ -398,7 +392,7 @@
         const sortedDates = Object.keys(groupedByDate).sort((a, b) => {
              const dateA = a.split('.').reverse().join('-');
              const dateB = b.split('.').reverse().join('-');
-             return new Date(dateB) - new Date(dateA);
+             return new Date(dateA) - new Date(dateB); // ИЗМЕНЕНО: Сортировка по возрастанию
         });
 
         sortedDates.forEach((date, dateIndex) => {
@@ -534,31 +528,11 @@
         ta.value="";
     }
 
-    function exportSearch(){
-        if(Object.keys(lastExport).length===0){ alert("Нет данных для экспорта"); return; }
-        const ws_data=[];
-        for(const [m,arr] of Object.entries(lastExport)){
-            ws_data.push([`Менеджер ${m}:`]);
-            arr.forEach((v,i)=>ws_data.push([`${i+1}. ${v}`]));
-            ws_data.push([]);
-        }
-        const ws=XLSX.utils.aoa_to_sheet(ws_data);
-        const wb=XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb,ws,"Результаты");
-        XLSX.writeFile(wb,"olma-search.xlsx");
-    }
-
     function exportJournal(){
-        let filteredJournal = [...journal];
-        if (currentJournalFilters.user && currentJournalFilters.user !== 'all') {
-             // Фильтруем уже загруженный журнал
-             filteredJournal = journal.filter(entry => entry.user === currentJournalFilters.user);
-        }
-
-        if(filteredJournal.length === 0){ alert("Нет данных для экспорта по текущему фильтру"); return; }
+        if(journal.length === 0){ alert("Нет данных для экспорта по текущему фильтру"); return; }
 
         const ws_data=[["Дата","Кто искал","Менеджер","Сотрудник / Магазин"]];
-        filteredJournal.forEach(entry => {
+        journal.forEach(entry => {
             ws_data.push([entry.date, entry.user, entry.manager, entry.employee]);
         });
         const ws=XLSX.utils.aoa_to_sheet(ws_data);
@@ -600,7 +574,7 @@
         if (userSelect.value) {
             currentUser = userSelect.value;
             await loadDB(); 
-            await loadJournal(); // Загружаем журнал после выбора пользователя
+            await loadJournal(currentUser); 
             document.getElementById("welcomeOverlay").style.display = "none";
             document.getElementById("mainApp").style.display = "block";
         } else {
@@ -614,10 +588,7 @@
     document.getElementById("btnImport").addEventListener("click", ()=>document.getElementById("fileInput").click());
     document.getElementById("fileInput").addEventListener("change", e => { const f=e.target.files[0]; if(f) doImportFromExcel(f); e.target.value=""; });
     
-    document.getElementById("btnJournal").addEventListener("click", async () => {
-        // Перед открытием фильтра, загрузим всех пользователей, у которых есть журналы
-        const filterUserSelect = document.getElementById("filterUser");
-        // Логика для загрузки всех пользователей с журналами может быть добавлена здесь
+    document.getElementById("btnJournal").addEventListener("click", () => {
         document.getElementById("filterOverlay").style.display = "flex";
     });
     
@@ -629,26 +600,19 @@
         const selectedUser = document.getElementById('filterUser').value;
         currentJournalFilters = { user: selectedUser };
         
-        // Загружаем журнал для выбранного пользователя
-        try {
-            if (selectedUser === 'all') {
-                // Сложная логика для загрузки всех журналов, пока опустим
-                alert("Просмотр журналов всех пользователей пока не поддерживается.");
-                journal = [];
-            } else {
-                const doc = await firestore.collection("journals").doc(selectedUser).get();
-                if (doc.exists) {
-                    journal = doc.data().entries || [];
-                } else {
-                    journal = [];
-                }
-            }
-        } catch(e) {
-            journal = [];
-            console.error(e);
+        let journalData = [];
+        if (selectedUser === 'all') {
+            const querySnapshot = await firestore.collection("journals").get();
+            querySnapshot.forEach((doc) => {
+                journalData = journalData.concat(doc.data().entries || []);
+            });
+            // Сортируем общий журнал по дате
+            journalData.sort((a, b) => new Date(a.date.split('.').reverse().join('-')) - new Date(b.date.split('.').reverse().join('-')));
+        } else {
+            journalData = await loadJournal(selectedUser);
         }
-
-        renderJournal(currentJournalFilters);
+        journal = journalData; // Обновляем глобальную переменную для экспорта
+        renderJournal(journalData);
         document.getElementById("filterOverlay").style.display = "none";
         document.getElementById("journalOverlay").style.display = "flex";
     });
@@ -665,11 +629,17 @@
     });
     document.getElementById('btnConfirmClear').addEventListener('click', async () => {
         if (passwordInput.value === 'Trener') {
-            if (confirm("Вы уверены, что хотите очистить ВЕСЬ журнал для ТЕКУЩЕГО пользователя? Это действие нельзя отменить.")) {
+            const userToClear = currentJournalFilters.user || currentUser;
+            if(userToClear === 'all'){
+                alert("Нельзя очистить журнал для всех пользователей сразу. Выберите конкретного пользователя.");
+                passwordOverlay.style.display = 'none';
+                return;
+            }
+            if (confirm(`Вы уверены, что хотите очистить ВЕСЬ журнал для пользователя ${userToClear}? Это действие нельзя отменить.`)) {
                 journal = [];
-                await saveJournal(); // Сохраняем пустой журнал в Firebase
-                renderJournal(currentJournalFilters);
-                alert("Журнал для " + currentUser + " очищен.");
+                await firestore.collection("journals").doc(userToClear).set({ entries: [] });
+                renderJournal(journal);
+                alert("Журнал для " + userToClear + " очищен.");
             }
         } else {
             alert("Неверный пароль!");
