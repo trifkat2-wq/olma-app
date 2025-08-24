@@ -364,8 +364,7 @@
                 user: currentUser,
                 manager: manager,
                 employee: emp,
-                date: formattedDate,
-                timestamp: firebase.firestore.FieldValue.serverTimestamp() // Для сортировки
+                date: formattedDate
             });
         });
         await saveJournal();
@@ -380,7 +379,6 @@
             return;
         }
         
-        // Сортировка по дате (старые вверху)
         journalData.sort((a,b) => {
             const dateA = a.date.split(', ')[0].split('.').reverse().join('-') + 'T' + (a.date.split(', ')[1] || '00:00');
             const dateB = b.date.split(', ')[0].split('.').reverse().join('-') + 'T' + (b.date.split(', ')[1] || '00:00');
@@ -510,6 +508,21 @@
         }
         lastExport=grouped;
         ta.value="";
+    }
+    
+    // ВОССТАНОВЛЕННАЯ ФУНКЦИЯ
+    function exportSearch(){
+        if(Object.keys(lastExport).length===0){ alert("Нет данных для экспорта"); return; }
+        const ws_data=[];
+        for(const [m,arr] of Object.entries(lastExport)){
+            ws_data.push([`Менеджер ${m}:`]);
+            arr.forEach((v,i)=>ws_data.push([`${i+1}. ${v}`]));
+            ws_data.push([]);
+        }
+        const ws=XLSX.utils.aoa_to_sheet(ws_data);
+        const wb=XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb,ws,"Результаты");
+        XLSX.writeFile(wb,"olma-search.xlsx");
     }
 
     function exportJournal(){
