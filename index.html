@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8" />
+    <title>Olma Market — Поиск менеджера</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    
+    <!-- ДОБАВЛЕНЫ СКРИПТЫ FIREBASE -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
+
+    <style>
+        /* ... все ваши старые стили остаются здесь без изменений ... */
+        :root{
+            --olma-red: rgb(239,62,45);
+            --olma-green: rgb(77,185,109);
+            --olma-yellow: rgb(255,198,62);
+            --olma-black: #202020;
+            --card-w: 520px;
+        }
+        *{box-sizing:border-box}
+        body{
+            margin:0;
+            font-family: Arial, Helvetica, sans-serif;
+            background:#f3f4f6;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            min-height:100vh;
+        }
+        .card{
+            width: min(var(--card-w), 96vw);
+            background:#fff;
+            border-radius:16px;
+            box-shadow:0 8px 24px rgba(0,0,0,.12);
+            padding:22px 24px 18px;
+            text-align:center;
+            position:relative;
+        }
+        .logo{ width:180px; margin:2px auto 10px; display:block; object-fit:contain; }
+        h1{ margin:4px 0 14px; font-size:28px; color:var(--olma-black); }
+        textarea, select, input[type="password"] {
+            display:block; width:100%;
+            padding:10px 12px; border:1.5px solid #d1d5db; border-radius:10px;
+            font-family: ui-monospace, monospace; font-size:14px; line-height:1.4;
+            resize:vertical; margin:0 auto 14px;
+        }
+        textarea{ height:120px; }
+        .btn{
+            display:block; width:100%; border:none; border-radius:12px;
+            padding:12px 16px; font-size:16px; font-weight:700;
+            cursor:pointer; transition:transform .02s ease, opacity .2s ease;
+            color:#fff; margin:10px auto 0;
+        }
+        .btn:active{ transform:scale(.995); }
+        .btn[disabled] { background-color: #9ca3af; cursor: not-allowed; }
+        .btn-red{ background:var(--olma-red); }
+        .btn-green{ background:var(--olma-green); }
+        .btn-yellow{ background:var(--olma-yellow); color:#212121; }
+        .results{ text-align:left; margin-top:14px; }
+        .mgr{ font-weight:700; color:var(--olma-black); margin:14px 0 6px }
+        ol{ margin:6px 0 0 18px; }
+        .muted{ color:#6b7280; font-style:italic; margin-top:8px }
+        .copy-wrap{ display:none; margin-top:12px; text-align:center; }
+        .copy-btn{ width:28px; height:28px; border:none; background:transparent; cursor:pointer; opacity:.75; padding:0; margin:0 auto; }
+        .copy-btn:hover{ opacity:1 } .copy-btn:active{ transform:scale(.98) }
+        .copy-btn svg{ width:100%; height:100%; display:block; }
+        .upbar{ position:absolute; top:10px; right:10px; }
+        .btn-journal{
+            background:#fff; border:none; border-radius:8px; padding:6px 12px;
+            font-weight:600; font-size:14px; cursor:pointer;
+            box-shadow:0 2px 6px rgba(0,0,0,.15);
+        }
+        .btn-journal:hover{ background:#f9f9f9; }
+        .overlay{
+            position:fixed; top:0; left:0; right:0; bottom:0;
+            background:rgba(0,0,0,0.4);
+            display:flex; align-items:center; justify-content:center;
+            z-index:1000;
+        }
+        .journal-overlay, .filter-overlay, .password-overlay { display:none; }
+        .journal-window{
+            width:90vw; height:80vh;
+            background:#fff; border-radius:14px;
+            box-shadow:0 8px 24px rgba(0,0,0,.25);
+            display:flex; flex-direction:column; overflow:hidden;
+        }
+        .journal-header{
+            flex:0 0 auto; padding:12px 16px; background:#f3f4f6;
+            border-bottom:1px solid #ddd; display:flex; justify-content:space-between; align-items:center;
+        }
+        .journal-header h2{ margin:0; font-size:18px; font-weight:700; }
+        .journal-close{ border:none; background:transparent; font-size:20px; cursor:pointer; }
+        .journal-body{ flex:1 1 auto; overflow:auto; padding:12px; text-align:left; }
+        table.journal-table{ border-collapse:collapse; width:100%; font-size:14px; }
+        .journal-table th,.journal-table td{ border:1px solid #ddd; padding:6px 8px; text-align:left; vertical-align: top; }
+        .journal-table th{ background:#f9fafb; }
+        .journal-footer{ padding:10px; border-top:1px solid #ddd; text-align:right; display:flex; justify-content:space-between; }
+        .btn-export-journal, .btn-clear-journal{
+            background:var(--olma-green); color:#fff; border:none;
+            padding:8px 14px; border-radius:8px; font-weight:600; cursor:pointer;
+        }
+        .btn-clear-journal{ background:var(--olma-red); }
+        
+        details.date-group { border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 12px; }
+        details.date-group summary {
+            font-weight: 700; font-size: 16px; padding: 10px 14px; cursor: pointer;
+            background-color: #f9fafb;
+        }
+        details[open].date-group summary { border-bottom: 1px solid #e5e7eb; }
+        .date-content { padding: 8px; }
+
+        .filter-window .form-group{ text-align: left; margin-bottom: 12px; }
+        .filter-window .form-group label{ font-weight: 600; font-size: 14px; margin-bottom: 4px; display: block; }
+        
+        .password-window .form-group { text-align: left; margin-bottom: 12px; }
+        .password-window .form-group label { font-weight: 600; font-size: 14px; margin-bottom: 4px; display: block; }
+
+
+        @media (max-width: 520px) {
+            .card {
+                padding: 20px 16px 16px;
+            }
+            h1 {
+                font-size: 24px;
+                margin-bottom: 12px;
+            }
+            .btn {
+                padding: 11px 14px;
+                font-size: 15px;
+                margin-top: 8px;
+            }
+            textarea {
+                height: 100px;
+                font-size: 13px;
+            }
+            .logo {
+                width: 150px;
+            }
+            .journal-window {
+                width: 95vw;
+                height: 85vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="welcomeOverlay" class="overlay">
+        <div class="card welcome-card">
+            <img class="logo" src="logo_olma_hd_transparent.png" alt="Olma Market" onerror="this.style.display='none'">
+            <h1>Привет!</h1>
+            <p>Выберите свое ФИО, чтобы начать работу.</p>
+            <select id="userSelect">
+                <option value="" disabled selected>Выберите пользователя</option>
+                <option value="Тимаев Рифкат">Тимаев Рифкат</option>
+                <option value="Гуламова Сабина">Гуламова Сабина</option>
+                <option value="Турсунова Умида">Турсунова Умида</option>
+                <option value="Дониер Алибаев">Дониер Алибаев</option>
+                <option value="Наталия Юсупова">Наталия Юсупова</option>
+                <option value="Шахноза Рахманкулова">Шахноза Рахманкулова</option>
+            </select>
+            <button class="btn btn-red" id="btnStart">Начать</button>
+        </div>
+    </div>
+
+    <div id="mainApp" style="display:none;">
+        <div class="card">
+            <div class="upbar"><button class="btn-journal" id="btnJournal">Журнал</button></div>
+            <img class="logo" src="logo_olma_hd_transparent.png" alt="Olma Market" onerror="this.style.display='none'">
+            <h1>Поиск менеджера</h1>
+            <textarea id="input" placeholder="Введите текст"></textarea>
+            <button class="btn btn-red" id="btnSearch">Показать менеджера</button>
+            <button class="btn btn-green" id="btnExport">Экспорт поиска в Excel</button>
+            <input type="file" id="fileInput" accept=".xlsx,.xls" hidden>
+            <button class="btn btn-yellow" id="btnImport">Импорт базы из Excel</button>
+            <div id="results" class="results"></div>
+            <div id="copyWrap" class="copy-wrap">
+                <button id="btnCopy" class="copy-btn"><svg viewBox="0 0 24 24"><path d="M16 2h-1.18A3 3 0 0 0 12 0a3 3 0 0 0-2.82 2H8a2 2 0 0 0-2 2v2h12V4a2 2 0 0 0-2-2zM6 8v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8H6z"/></svg></button>
+            </div>
+            <div id="emptyMsg" class="muted"></div>
+            <div id="dbStatus" class="muted" style="font-size: 12px; margin-top: 5px; font-weight: bold;"></div>
+        </div>
+    </div>
+    
+    <div id="journalOverlay" class="journal-overlay overlay">
+        <div class="journal-window">
+            <div class="journal-header">
+                <h2 id="journalTitle">Журнал поиска</h2>
+                <button class="journal-close" id="closeJournal">×</button>
+            </div>
+            <div class="journal-body" id="journalBody"></div>
+            <div class="journal-footer">
+                <button class="btn-clear-journal" id="btnClearJournal">Очистить журнал</button>
+                <button class="btn-export-journal" id="btnExportJournal">Экспорт журнала</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="filterOverlay" class="filter-overlay overlay">
+        <div class="card filter-window">
+            <h1>Фильтр журнала</h1>
+            <div class="form-group">
+                <label for="filterUser">Пользователь</label>
+                <select id="filterUser"></select>
+            </div>
+            <button class="btn btn-green" id="btnApplyFilter">Показать</button>
+            <button class="btn" id="btnCancelFilter" style="background-color: #6b7280;">Отмена</button>
+        </div>
+    </div>
+
+    <!-- НОВОЕ ОКНО ДЛЯ ВВОДА ПАРОЛЯ -->
+    <div id="passwordOverlay" class="password-overlay overlay">
+        <div class="card password-window" style="width: min(400px, 90vw);">
+            <h2>Подтверждение</h2>
+            <p>Для очистки журнала введите пароль администратора.</p>
+            <div class="form-group">
+                <label for="passwordInput">Пароль</label>
+                <input type="password" id="passwordInput">
+            </div>
+            <button class="btn btn-red" id="btnConfirmClear">Подтвердить</button>
+            <button class="btn" id="btnCancelClear" style="background-color: #6b7280;">Отмена</button>
+        </div>
+    </div>
+
+<script>
+    // ВАШИ КЛЮЧИ FIREBASE
+    const firebaseConfig = {
+      apiKey: "AIzaSyDHrpashKVWzfqRWwp2fmrhfkvVNYEcMFI",
+      authDomain: "olma-market-db.firebaseapp.com",
+      projectId: "olma-market-db",
+      storageBucket: "olma-market-db.appspot.com",
+      messagingSenderId: "177102940053",
+      appId: "1:77102940053:web:d799ea7b8c9e71b704789c"
+    };
+
+    // Инициализация Firebase
+    firebase.initializeApp(firebaseConfig);
+    const firestore = firebase.firestore();
+
+    /* === Хранилище === */
+    let DB = {};
+    let currentUser = ""; 
+    let journal = [];
+    let currentJournalFilters = {}; 
+
+    const dbStatusEl = document.getElementById('dbStatus');
+    const importBtn = document.getElementById('btnImport');
+
+    async function loadDB() {
+        dbStatusEl.textContent = 'Загрузка базы данных...';
+        importBtn.disabled = true;
+        try {
+            const doc = await firestore.collection("bases").doc("main").get();
+            if (doc.exists && Object.keys(doc.data()).length > 0) {
+                DB = doc.data();
+                const managerCount = Object.keys(DB).length;
+                dbStatusEl.textContent = `База загружена: ${managerCount} менеджеров`;
+            } else {
+                DB = {};
+                dbStatusEl.textContent = 'База не найдена. Импортируйте файл Excel.';
+            }
+        } catch (error) {
+            console.error("Ошибка загрузки базы: ", error);
+            dbStatusEl.textContent = 'Ошибка загрузки базы.';
+        } finally {
+            importBtn.disabled = false;
+        }
+    }
+
+    async function saveDB(newDB) {
+        dbStatusEl.textContent = 'Сохранение базы на сервере...';
+        importBtn.disabled = true;
+        try {
+            await firestore.collection("bases").doc("main").set(newDB);
+            alert("База успешно сохранена! Страница будет перезагружена для применения изменений.");
+            window.location.reload(); // ПРИНУДИТЕЛЬНАЯ ПЕРЕЗАГРУЗКА
+        } catch (error) {
+            console.error("Ошибка сохранения базы: ", error);
+            alert("Не удалось сохранить базу данных.");
+            dbStatusEl.textContent = 'Ошибка сохранения.';
+            importBtn.disabled = false;
+        }
+    }
+
+    // --- НОВЫЕ ФУНКЦИИ ДЛЯ РАБОТЫ С ЖУРНАЛОМ В FIREBASE ---
+    async function loadJournal() {
+        if (!currentUser) return;
+        try {
+            const doc = await firestore.collection("journals").doc(currentUser).get();
+            if (doc.exists) {
+                journal = doc.data().entries || [];
+            } else {
+                journal = [];
+            }
+        } catch (error) {
+            console.error("Ошибка загрузки журнала:", error);
+            journal = [];
+        }
+    }
+
+    async function saveJournal() {
+        if (!currentUser) return;
+        try {
+            await firestore.collection("journals").doc(currentUser).set({ entries: journal });
+        } catch (error) {
+            console.error("Ошибка сохранения журнала:", error);
+        }
+    }
+    
+    function doImportFromExcel(file){
+        const r = new FileReader();
+        r.onload = e => {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const wb = XLSX.read(data, {type:'array'});
+                const ws = wb.Sheets[wb.SheetNames[0]];
+                const rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:false});
+                
+                const newDB = {};
+                
+                if (rows.length < 1) {
+                    alert("Файл Excel пуст.");
+                    return;
+                }
+                
+                const firstRowCell = String(rows[0][0] || '').toLowerCase();
+                const startingRow = (firstRowCell.includes('менеджер') || firstRowCell.includes('manager')) ? 1 : 0;
+
+                for (let i = startingRow; i < rows.length; i++) {
+                    const row = rows[i];
+                    const manager = String(row[0] || '').trim();
+                    const codesString = String(row[1] || '').trim();
+
+                    if (!manager || !codesString) continue;
+
+                    const codesArray = codesString.split(',').map(code => code.trim()).filter(Boolean);
+
+                    if (codesArray.length > 0) {
+                        newDB[manager] = codesArray;
+                    }
+                }
+
+                if (Object.keys(newDB).length === 0) { 
+                    alert("Не удалось распознать данные. Убедитесь, что файл имеет 2 столбца: 'Менеджер' и 'Коды'."); 
+                    return; 
+                }
+                
+                if (confirm("Найдено " + Object.keys(newDB).length + " менеджеров. Вы уверены, что хотите обновить общую базу для ВСЕХ пользователей?")) {
+                    saveDB(newDB);
+                }
+            } catch (error) {
+                console.error("Ошибка при чтении файла Excel:", error);
+                alert("Не удалось прочитать файл. Возможно, он поврежден или имеет неверный формат.");
+            }
+        };
+        r.readAsArrayBuffer(file);
+    }
+    
+    async function addToJournal(manager, employees){
+        const now = new Date().toLocaleString('ru-RU', {
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit'
+        });
+        
+        employees.forEach(emp => {
+            journal.unshift({
+                user: currentUser,
+                manager: manager,
+                employee: emp,
+                date: now
+            });
+        });
+        await saveJournal(); // Сохраняем в Firebase
+    }
+    
+    function renderJournal(filters = {}) {
+        const body = document.getElementById("journalBody");
+        body.innerHTML = "";
+        let filteredJournal = [...journal];
+
+        if (filters.user && filters.user !== 'all') {
+            // Эта фильтрация теперь происходит при загрузке, но оставим на всякий случай
+        }
+
+        if (filteredJournal.length === 0) {
+            body.innerHTML = "<p class='muted' style='text-align:center;'>Записей в журнале нет</p>";
+            return;
+        }
+
+        const groupedByDate = {};
+        filteredJournal.forEach(entry => {
+            const dateKey = entry.date.split(',')[0]; 
+            if (!groupedByDate[dateKey]) groupedByDate[dateKey] = [];
+            groupedByDate[dateKey].push(entry);
+        });
+        
+        const sortedDates = Object.keys(groupedByDate).sort((a, b) => {
+             const dateA = a.split('.').reverse().join('-');
+             const dateB = b.split('.').reverse().join('-');
+             return new Date(dateB) - new Date(dateA);
+        });
+
+        sortedDates.forEach((date, dateIndex) => {
+            const entriesForDate = groupedByDate[date];
+            const details = document.createElement("details");
+            details.className = "date-group";
+            details.open = true;
+
+            const summary = document.createElement("summary");
+            summary.textContent = date;
+            details.appendChild(summary);
+
+            const contentDiv = document.createElement("div");
+            contentDiv.className = "date-content";
+
+            const table = document.createElement("table");
+            table.className = "journal-table";
+            table.innerHTML = `<thead><tr><th>Время</th><th>Кто искал</th><th>Менеджер</th><th>Сотрудник / Магазин</th></tr></thead>`;
+            const tbody = document.createElement("tbody");
+
+            const groupedByManager = {};
+            entriesForDate.forEach(entry => {
+                (groupedByManager[entry.manager] ||= []).push(entry);
+            });
+
+            for (const manager in groupedByManager) {
+                const managerEntries = groupedByManager[manager];
+                managerEntries.forEach((entry, index) => {
+                    const tr = document.createElement("tr");
+                    const time = entry.date.split(',')[1] || '';
+                    
+                    tr.innerHTML = `<td>${time}</td><td>${entry.user}</td>`;
+
+                    if (index === 0) {
+                        const tdManager = document.createElement("td");
+                        tdManager.rowSpan = managerEntries.length;
+                        tdManager.textContent = manager;
+                        tr.appendChild(tdManager);
+                    }
+                    
+                    const tdEmployee = document.createElement("td");
+                    tdEmployee.textContent = entry.employee;
+                    tr.appendChild(tdEmployee);
+                    
+                    tbody.appendChild(tr);
+                });
+            }
+
+            table.appendChild(tbody);
+            contentDiv.appendChild(table);
+            details.appendChild(contentDiv);
+            body.appendChild(details);
+        });
+    }
+
+    const CODE_RE = /([A-ZА-Я])\s*-?\s*0*(\d+)/ig;
+
+    function normalizeCode(letter, numberStr) {
+        const letterMap = { 'М': 'M', 'А': 'A', 'К': 'K', 'С': 'C', 'Р': 'R' };
+        const upperLetter = letter.toUpperCase();
+        const normalizedLetter = letterMap[upperLetter] || upperLetter;
+        const number = parseInt(numberStr, 10);
+        return `${normalizedLetter}-${number}`;
+    }
+
+    function buildCodeMap(db){
+        const map = {};
+        for (const [manager, codes] of Object.entries(db)) {
+            if (Array.isArray(codes)) {
+                for (const code of codes) {
+                    CODE_RE.lastIndex = 0;
+                    const match = CODE_RE.exec(String(code));
+                    if (match) {
+                        const normalizedCode = normalizeCode(match[1], match[2]);
+                        if (!map[normalizedCode]) {
+                            map[normalizedCode] = manager;
+                        }
+                    }
+                }
+            }
+        }
+        return map;
+    }
+
+    let lastExport={};
+    async function doSearch(){
+        const ta=document.getElementById('input');
+        const raw=ta.value.trim();
+        const out=document.getElementById('results');
+        const empty=document.getElementById('emptyMsg');
+        const copyWrap=document.getElementById('copyWrap');
+        out.innerHTML=''; empty.textContent=''; copyWrap.style.display='none';
+        if(!raw){ empty.textContent='Введите данные'; return; }
+        if (Object.keys(DB).length === 0) {
+            empty.textContent = 'База пуста. Импортируйте файл Excel.';
+            return;
+        }
+        
+        const codeMap = buildCodeMap(DB);
+        const lines=raw.split(/\n/).map(s=>s.trim()).filter(Boolean);
+        const grouped={};
+
+        for(const line of lines){
+            let match;
+            CODE_RE.lastIndex = 0;
+            while ((match = CODE_RE.exec(line)) !== null) {
+                const normalizedCode = normalizeCode(match[1], match[2]);
+                const manager = codeMap[normalizedCode];
+                if (manager) {
+                    if (!grouped[manager]) {
+                        grouped[manager] = [];
+                    }
+                    if (!grouped[manager].includes(line)) {
+                        grouped[manager].push(line);
+                    }
+                }
+            }
+        }
+
+        if(Object.keys(grouped).length===0){ empty.textContent='Совпадений нет'; }
+        else{
+            for(const [m,arr] of Object.entries(grouped)){
+                const h=document.createElement('div'); h.className='mgr'; h.textContent='Менеджер '+m+':'; out.appendChild(h);
+                const ol=document.createElement('ol');
+                const cleanedArr = arr.map(line => line.replace(/^\d+\.\s*/, ''));
+                cleanedArr.forEach(v=>{ const li=document.createElement('li'); li.textContent=v; ol.appendChild(li); });
+                out.appendChild(ol);
+                await addToJournal(m, cleanedArr);
+            }
+            copyWrap.style.display='block';
+        }
+        lastExport=grouped;
+        ta.value="";
+    }
+
+    function exportSearch(){
+        if(Object.keys(lastExport).length===0){ alert("Нет данных для экспорта"); return; }
+        const ws_data=[];
+        for(const [m,arr] of Object.entries(lastExport)){
+            ws_data.push([`Менеджер ${m}:`]);
+            arr.forEach((v,i)=>ws_data.push([`${i+1}. ${v}`]));
+            ws_data.push([]);
+        }
+        const ws=XLSX.utils.aoa_to_sheet(ws_data);
+        const wb=XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb,ws,"Результаты");
+        XLSX.writeFile(wb,"olma-search.xlsx");
+    }
+
+    function exportJournal(){
+        let filteredJournal = [...journal];
+        if (currentJournalFilters.user && currentJournalFilters.user !== 'all') {
+             // Фильтруем уже загруженный журнал
+             filteredJournal = journal.filter(entry => entry.user === currentJournalFilters.user);
+        }
+
+        if(filteredJournal.length === 0){ alert("Нет данных для экспорта по текущему фильтру"); return; }
+
+        const ws_data=[["Дата","Кто искал","Менеджер","Сотрудник / Магазин"]];
+        filteredJournal.forEach(entry => {
+            ws_data.push([entry.date, entry.user, entry.manager, entry.employee]);
+        });
+        const ws=XLSX.utils.aoa_to_sheet(ws_data);
+        const wb=XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb,ws,"Журнал");
+        XLSX.writeFile(wb,`olma-journal-export.xlsx`);
+    }
+
+    function clearJournal(){
+        document.getElementById('passwordOverlay').style.display = 'flex';
+    }
+    
+    function doCopyResults(){
+        const out=document.getElementById('results');
+        if(!out.textContent.trim()){ alert("Нет данных"); return; }
+        const text=Array.from(out.children).map(n=>n.textContent).join("\n");
+        navigator.clipboard?.writeText(text).then(()=>toastCopied()).catch(()=>legacyCopy(text));
+    }
+    function legacyCopy(t){
+        const ta=document.createElement("textarea"); ta.value=t; document.body.appendChild(ta); ta.select();
+        try{ document.execCommand("copy"); }catch{} document.body.removeChild(ta); toastCopied();
+    }
+    function toastCopied(){ const msg=document.getElementById("emptyMsg"); const p=msg.textContent; msg.textContent="✔ Скопировано"; setTimeout(()=>msg.textContent=p,1200); }
+
+    function populateUserFilter() {
+        const userSelect = document.getElementById("userSelect");
+        const filterUserSelect = document.getElementById("filterUser");
+        filterUserSelect.innerHTML = '<option value="all">Все пользователи</option>';
+        for (let i = 1; i < userSelect.options.length; i++) {
+            const option = userSelect.options[i];
+            filterUserSelect.add(new Option(option.text, option.value));
+        }
+    }
+
+    document.addEventListener("DOMContentLoaded", populateUserFilter);
+
+    document.getElementById("btnStart").addEventListener("click", async () => {
+        const userSelect = document.getElementById("userSelect");
+        if (userSelect.value) {
+            currentUser = userSelect.value;
+            await loadDB(); 
+            await loadJournal(); // Загружаем журнал после выбора пользователя
+            document.getElementById("welcomeOverlay").style.display = "none";
+            document.getElementById("mainApp").style.display = "block";
+        } else {
+            alert("Пожалуйста, выберите ваше ФИО");
+        }
+    });
+
+    document.getElementById("btnCopy").addEventListener("click", doCopyResults);
+    document.getElementById("btnSearch").addEventListener("click", doSearch);
+    document.getElementById("btnExport").addEventListener("click", exportSearch);
+    document.getElementById("btnImport").addEventListener("click", ()=>document.getElementById("fileInput").click());
+    document.getElementById("fileInput").addEventListener("change", e => { const f=e.target.files[0]; if(f) doImportFromExcel(f); e.target.value=""; });
+    
+    document.getElementById("btnJournal").addEventListener("click", async () => {
+        // Перед открытием фильтра, загрузим всех пользователей, у которых есть журналы
+        const filterUserSelect = document.getElementById("filterUser");
+        // Логика для загрузки всех пользователей с журналами может быть добавлена здесь
+        document.getElementById("filterOverlay").style.display = "flex";
+    });
+    
+    document.getElementById("btnCancelFilter").addEventListener("click", () => {
+        document.getElementById("filterOverlay").style.display = "none";
+    });
+
+    document.getElementById("btnApplyFilter").addEventListener("click", async () => {
+        const selectedUser = document.getElementById('filterUser').value;
+        currentJournalFilters = { user: selectedUser };
+        
+        // Загружаем журнал для выбранного пользователя
+        try {
+            if (selectedUser === 'all') {
+                // Сложная логика для загрузки всех журналов, пока опустим
+                alert("Просмотр журналов всех пользователей пока не поддерживается.");
+                journal = [];
+            } else {
+                const doc = await firestore.collection("journals").doc(selectedUser).get();
+                if (doc.exists) {
+                    journal = doc.data().entries || [];
+                } else {
+                    journal = [];
+                }
+            }
+        } catch(e) {
+            journal = [];
+            console.error(e);
+        }
+
+        renderJournal(currentJournalFilters);
+        document.getElementById("filterOverlay").style.display = "none";
+        document.getElementById("journalOverlay").style.display = "flex";
+    });
+
+    document.getElementById("closeJournal").addEventListener("click", ()=>document.getElementById("journalOverlay").style.display="none");
+    document.getElementById("btnExportJournal").addEventListener("click", exportJournal);
+    document.getElementById("btnClearJournal").addEventListener("click", clearJournal);
+
+    const passwordOverlay = document.getElementById('passwordOverlay');
+    const passwordInput = document.getElementById('passwordInput');
+    document.getElementById('btnCancelClear').addEventListener('click', () => {
+        passwordInput.value = '';
+        passwordOverlay.style.display = 'none';
+    });
+    document.getElementById('btnConfirmClear').addEventListener('click', async () => {
+        if (passwordInput.value === 'Trener') {
+            if (confirm("Вы уверены, что хотите очистить ВЕСЬ журнал для ТЕКУЩЕГО пользователя? Это действие нельзя отменить.")) {
+                journal = [];
+                await saveJournal(); // Сохраняем пустой журнал в Firebase
+                renderJournal(currentJournalFilters);
+                alert("Журнал для " + currentUser + " очищен.");
+            }
+        } else {
+            alert("Неверный пароль!");
+        }
+        passwordInput.value = '';
+        passwordOverlay.style.display = 'none';
+    });
+
+
+</script>
+</body>
+</html>
