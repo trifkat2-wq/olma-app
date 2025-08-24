@@ -119,6 +119,29 @@
         .modal-window p { margin: 10px 0 20px; }
         .modal-buttons { display: flex; gap: 10px; }
 
+        .toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: var(--olma-green);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            z-index: 2000;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, top 0.3s ease, visibility 0.3s ease;
+        }
+        .toast.show {
+            opacity: 1;
+            visibility: visible;
+            top: 40px;
+        }
+        .toast.error {
+            background-color: var(--olma-red);
+        }
 
         @media (max-width: 520px) {
             .card {
@@ -228,7 +251,6 @@
         </div>
     </div>
 
-    <!-- НОВОЕ ОКНО ПОДТВЕРЖДЕНИЯ -->
     <div id="confirmOverlay" class="confirm-overlay overlay">
         <div class="card modal-window" style="width: min(400px, 90vw);">
             <h2 id="confirmTitle">Подтвердите действие</h2>
@@ -238,6 +260,10 @@
                 <button class="btn btn-red" id="btnConfirmAction">Да, уверен</button>
             </div>
         </div>
+    </div>
+
+    <div id="toast" class="toast">
+        <span id="toastMessage"></span>
     </div>
 
 
@@ -265,7 +291,26 @@
     const dbStatusEl = document.getElementById('dbStatus');
     const importBtn = document.getElementById('btnImport');
 
-    // --- НОВАЯ ФУНКЦИЯ ДЛЯ МОДАЛЬНЫХ ОКОН ---
+    // --- ФУНКЦИИ ДЛЯ МОДАЛЬНЫХ ОКОН И УВЕДОМЛЕНИЙ ---
+    let toastTimeout;
+    function showToast(message, isError = false) {
+        const toast = document.getElementById('toast');
+        const toastMessage = document.getElementById('toastMessage');
+
+        clearTimeout(toastTimeout);
+
+        toastMessage.textContent = message;
+        toast.className = 'toast'; // Reset classes
+        if (isError) {
+            toast.classList.add('error');
+        }
+        toast.classList.add('show');
+
+        toastTimeout = setTimeout(() => {
+            toast.classList.remove('show');
+        }, 3000); // Hide after 3 seconds
+    }
+
     function showConfirm(message, onConfirm) {
         const confirmOverlay = document.getElementById('confirmOverlay');
         document.getElementById('confirmMessage').textContent = message;
@@ -320,11 +365,11 @@
         importBtn.disabled = true;
         try {
             await firestore.collection("bases").doc("main").set(newDB);
-            alert("База успешно сохранена! Страница будет перезагружена для применения изменений.");
-            window.location.reload();
+            showToast("База успешно сохранена!");
+            setTimeout(() => window.location.reload(), 1500);
         } catch (error) {
             console.error("Ошибка сохранения базы: ", error);
-            alert("Не удалось сохранить базу данных.");
+            showToast("Не удалось сохранить базу данных.", true);
             dbStatusEl.textContent = 'Ошибка сохранения.';
             importBtn.disabled = false;
         }
@@ -362,7 +407,7 @@
                 const newDB = {};
                 
                 if (rows.length < 1) {
-                    alert("Файл Excel пуст.");
+                    showToast("Файл Excel пуст.", true);
                     return;
                 }
                 
@@ -384,7 +429,7 @@
                 }
 
                 if (Object.keys(newDB).length === 0) { 
-                    alert("Не удалось распознать данные. Убедитесь, что файл имеет 2 столбца: 'Менеджер' и 'Коды'."); 
+                    showToast("Не удалось распознать данные в файле.", true);
                     return; 
                 }
                 
@@ -394,7 +439,7 @@
 
             } catch (error) {
                 console.error("Ошибка при чтении файла Excel:", error);
-                alert("Не удалось прочитать файл. Возможно, он поврежден или имеет неверный формат.");
+                showToast("Ошибка при чтении файла Excel.", true);
             }
         };
         r.readAsArrayBuffer(file);
@@ -603,7 +648,7 @@
     }
     
     function exportSearch(){
-        if(Object.keys(lastExport).length===0){ alert("Нет данных для экспорта"); return; }
+        if(Object.keys(lastExport).length===0){ showToast("Нет данных для экспорта", true); return; }
         const ws_data=[];
         for(const [m,arr] of Object.entries(lastExport)){
             ws_data.push([`Менеджер ${m}:`]);
@@ -617,7 +662,7 @@
     }
 
     function exportJournal(){
-        if(displayedJournal.length === 0){ alert("Нет данных для экспорта по текущему фильтру"); return; }
+        if(displayedJournal.length === 0){ showToast("Нет данных для экспорта по текущему фильтру", true); return; }
 
         const ws_data=[["Кто искал","Смена","Менеджер","Сотрудник / Магазин", "Дата", "Время"]];
         displayedJournal.forEach(entry => {
@@ -636,7 +681,7 @@
     
     function doCopyResults(){
         const out=document.getElementById('results');
-        if(!out.textContent.trim()){ alert("Нет данных"); return; }
+        if(!out.textContent.trim()){ showToast("Нет данных для копирования", true); return; }
         const text=Array.from(out.children).map(n=>n.textContent).join("\n");
         navigator.clipboard?.writeText(text).then(()=>toastCopied()).catch(()=>legacyCopy(text));
     }
@@ -667,7 +712,7 @@
             document.getElementById("welcomeOverlay").style.display = "none";
             document.getElementById("mainApp").style.display = "block";
         } else {
-            alert("Пожалуйста, выберите ваше ФИО");
+            showToast("Пожалуйста, выберите ваше ФИО", true);
         }
     });
 
@@ -724,10 +769,10 @@
                 }
                 displayedJournal = [];
                 renderJournal([]);
-                alert("Журнал для " + userToClear + " очищен.");
+                showToast("Журнал для " + userToClear + " очищен.");
             });
         } else {
-            alert("Неверный пароль!");
+            showToast("Неверный пароль!", true);
         }
         passwordInput.value = '';
         passwordOverlay.style.display = 'none';
