@@ -284,14 +284,10 @@
     }
 
     async function loadJournal(user) {
-        if (!user) return;
+        if (!user) return [];
         try {
             const doc = await firestore.collection("journals").doc(user).get();
-            if (doc.exists) {
-                return doc.data().entries || [];
-            } else {
-                return [];
-            }
+            return doc.exists ? (doc.data().entries || []) : [];
         } catch (error) {
             console.error("Ошибка загрузки журнала:", error);
             return [];
@@ -357,17 +353,19 @@
     }
     
     async function addToJournal(manager, employees){
-        const now = new Date().toLocaleString('ru-RU', {
+        const now = new Date();
+        const formattedDate = now.toLocaleString('ru-RU', {
             year: 'numeric', month: '2-digit', day: '2-digit',
             hour: '2-digit', minute: '2-digit'
         });
         
         employees.forEach(emp => {
-            journal.push({ // ИЗМЕНЕНО: push вместо unshift
+            journal.push({
                 user: currentUser,
                 manager: manager,
                 employee: emp,
-                date: now
+                date: formattedDate,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp() // Для сортировки
             });
         });
         await saveJournal();
@@ -381,6 +379,13 @@
             body.innerHTML = "<p class='muted' style='text-align:center;'>Записей в журнале нет</p>";
             return;
         }
+        
+        // Сортировка по дате (старые вверху)
+        journalData.sort((a,b) => {
+            const dateA = a.date.split(', ')[0].split('.').reverse().join('-') + 'T' + (a.date.split(', ')[1] || '00:00');
+            const dateB = b.date.split(', ')[0].split('.').reverse().join('-') + 'T' + (b.date.split(', ')[1] || '00:00');
+            return new Date(dateA) - new Date(dateB);
+        });
 
         const groupedByDate = {};
         journalData.forEach(entry => {
@@ -392,10 +397,10 @@
         const sortedDates = Object.keys(groupedByDate).sort((a, b) => {
              const dateA = a.split('.').reverse().join('-');
              const dateB = b.split('.').reverse().join('-');
-             return new Date(dateA) - new Date(dateB); // ИЗМЕНЕНО: Сортировка по возрастанию
+             return new Date(dateA) - new Date(dateB);
         });
 
-        sortedDates.forEach((date, dateIndex) => {
+        sortedDates.forEach((date) => {
             const entriesForDate = groupedByDate[date];
             const details = document.createElement("details");
             details.className = "date-group";
@@ -413,33 +418,12 @@
             table.innerHTML = `<thead><tr><th>Время</th><th>Кто искал</th><th>Менеджер</th><th>Сотрудник / Магазин</th></tr></thead>`;
             const tbody = document.createElement("tbody");
 
-            const groupedByManager = {};
             entriesForDate.forEach(entry => {
-                (groupedByManager[entry.manager] ||= []).push(entry);
+                const tr = document.createElement("tr");
+                const time = entry.date.split(',')[1] || '';
+                tr.innerHTML = `<td>${time}</td><td>${entry.user}</td><td>${entry.manager}</td><td>${entry.employee}</td>`;
+                tbody.appendChild(tr);
             });
-
-            for (const manager in groupedByManager) {
-                const managerEntries = groupedByManager[manager];
-                managerEntries.forEach((entry, index) => {
-                    const tr = document.createElement("tr");
-                    const time = entry.date.split(',')[1] || '';
-                    
-                    tr.innerHTML = `<td>${time}</td><td>${entry.user}</td>`;
-
-                    if (index === 0) {
-                        const tdManager = document.createElement("td");
-                        tdManager.rowSpan = managerEntries.length;
-                        tdManager.textContent = manager;
-                        tr.appendChild(tdManager);
-                    }
-                    
-                    const tdEmployee = document.createElement("td");
-                    tdEmployee.textContent = entry.employee;
-                    tr.appendChild(tdEmployee);
-                    
-                    tbody.appendChild(tr);
-                });
-            }
 
             table.appendChild(tbody);
             contentDiv.appendChild(table);
@@ -606,8 +590,6 @@
             querySnapshot.forEach((doc) => {
                 journalData = journalData.concat(doc.data().entries || []);
             });
-            // Сортируем общий журнал по дате
-            journalData.sort((a, b) => new Date(a.date.split('.').reverse().join('-')) - new Date(b.date.split('.').reverse().join('-')));
         } else {
             journalData = await loadJournal(selectedUser);
         }
