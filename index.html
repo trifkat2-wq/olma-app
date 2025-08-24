@@ -39,7 +39,9 @@
             position:relative;
         }
         .logo{ width:180px; margin:2px auto 10px; display:block; object-fit:contain; }
-        h1{ margin:4px 0 14px; font-size:28px; color:var(--olma-black); }
+        h1, h2{ margin:4px 0 14px; color:var(--olma-black); }
+        h1 { font-size:28px; }
+        h2 { font-size:22px; }
         textarea, select, input[type="password"] {
             display:block; width:100%;
             padding:10px 12px; border:1.5px solid #d1d5db; border-radius:10px;
@@ -79,7 +81,7 @@
             display:flex; align-items:center; justify-content:center;
             z-index:1000;
         }
-        .journal-overlay, .filter-overlay, .password-overlay { display:none; }
+        .journal-overlay, .filter-overlay, .password-overlay, .confirm-overlay { display:none; }
         .journal-window{
             width:90vw; height:80vh;
             background:#fff; border-radius:14px;
@@ -112,11 +114,10 @@
         details[open].date-group summary { border-bottom: 1px solid #e5e7eb; }
         .date-content { padding: 8px; }
 
-        .filter-window .form-group{ text-align: left; margin-bottom: 12px; }
-        .filter-window .form-group label{ font-weight: 600; font-size: 14px; margin-bottom: 4px; display: block; }
-        
-        .password-window .form-group { text-align: left; margin-bottom: 12px; }
-        .password-window .form-group label { font-weight: 600; font-size: 14px; margin-bottom: 4px; display: block; }
+        .modal-window .form-group{ text-align: left; margin-bottom: 12px; }
+        .modal-window .form-group label{ font-weight: 600; font-size: 14px; margin-bottom: 4px; display: block; }
+        .modal-window p { margin: 10px 0 20px; }
+        .modal-buttons { display: flex; gap: 10px; }
 
 
         @media (max-width: 520px) {
@@ -199,29 +200,46 @@
     </div>
     
     <div id="filterOverlay" class="filter-overlay overlay">
-        <div class="card filter-window">
-            <h1>Фильтр журнала</h1>
+        <div class="card modal-window" style="width: min(400px, 90vw);">
+            <h2>Фильтр журнала</h2>
             <div class="form-group">
                 <label for="filterUser">Пользователь</label>
                 <select id="filterUser"></select>
             </div>
-            <button class="btn btn-green" id="btnApplyFilter">Показать</button>
-            <button class="btn" id="btnCancelFilter" style="background-color: #6b7280;">Отмена</button>
+            <div class="modal-buttons">
+                <button class="btn" id="btnCancelFilter" style="background-color: #6b7280;">Отмена</button>
+                <button class="btn btn-green" id="btnApplyFilter">Показать</button>
+            </div>
         </div>
     </div>
 
     <div id="passwordOverlay" class="password-overlay overlay">
-        <div class="card password-window" style="width: min(400px, 90vw);">
+        <div class="card modal-window" style="width: min(400px, 90vw);">
             <h2>Подтверждение</h2>
             <p>Для очистки журнала введите пароль администратора.</p>
             <div class="form-group">
                 <label for="passwordInput">Пароль</label>
                 <input type="password" id="passwordInput">
             </div>
-            <button class="btn btn-red" id="btnConfirmClear">Подтвердить</button>
-            <button class="btn" id="btnCancelClear" style="background-color: #6b7280;">Отмена</button>
+            <div class="modal-buttons">
+                <button class="btn" id="btnCancelClear" style="background-color: #6b7280;">Отмена</button>
+                <button class="btn btn-red" id="btnConfirmClear">Подтвердить</button>
+            </div>
         </div>
     </div>
+
+    <!-- НОВОЕ ОКНО ПОДТВЕРЖДЕНИЯ -->
+    <div id="confirmOverlay" class="confirm-overlay overlay">
+        <div class="card modal-window" style="width: min(400px, 90vw);">
+            <h2 id="confirmTitle">Подтвердите действие</h2>
+            <p id="confirmMessage">Вы уверены?</p>
+            <div class="modal-buttons">
+                <button class="btn" id="btnCancelAction" style="background-color: #6b7280;">Отмена</button>
+                <button class="btn btn-red" id="btnConfirmAction">Да, уверен</button>
+            </div>
+        </div>
+    </div>
+
 
 <script>
     // ВАШИ КЛЮЧИ FIREBASE
@@ -242,10 +260,39 @@
     let DB = {};
     let currentUser = ""; 
     let journal = [];
-    let displayedJournal = []; // Отдельный массив для отображения
+    let displayedJournal = [];
 
     const dbStatusEl = document.getElementById('dbStatus');
     const importBtn = document.getElementById('btnImport');
+
+    // --- НОВАЯ ФУНКЦИЯ ДЛЯ МОДАЛЬНЫХ ОКОН ---
+    function showConfirm(message, onConfirm) {
+        const confirmOverlay = document.getElementById('confirmOverlay');
+        document.getElementById('confirmMessage').textContent = message;
+        confirmOverlay.style.display = 'flex';
+
+        const btnConfirm = document.getElementById('btnConfirmAction');
+        const btnCancel = document.getElementById('btnCancelAction');
+
+        const confirmHandler = () => {
+            onConfirm();
+            cleanup();
+        };
+
+        const cancelHandler = () => {
+            cleanup();
+        };
+
+        const cleanup = () => {
+            confirmOverlay.style.display = 'none';
+            btnConfirm.removeEventListener('click', confirmHandler);
+            btnCancel.removeEventListener('click', cancelHandler);
+        };
+
+        btnConfirm.addEventListener('click', confirmHandler, { once: true });
+        btnCancel.addEventListener('click', cancelHandler, { once: true });
+    }
+
 
     async function loadDB() {
         dbStatusEl.textContent = 'Загрузка базы данных...';
@@ -341,9 +388,10 @@
                     return; 
                 }
                 
-                if (confirm("Найдено " + Object.keys(newDB).length + " менеджеров. Вы уверены, что хотите обновить общую базу для ВСЕХ пользователей?")) {
+                showConfirm(`Найдено ${Object.keys(newDB).length} менеджеров. Обновить общую базу для ВСЕХ пользователей?`, () => {
                     saveDB(newDB);
-                }
+                });
+
             } catch (error) {
                 console.error("Ошибка при чтении файла Excel:", error);
                 alert("Не удалось прочитать файл. Возможно, он поврежден или имеет неверный формат.");
@@ -666,19 +714,18 @@
         passwordInput.value = '';
         passwordOverlay.style.display = 'none';
     });
-    document.getElementById('btnConfirmClear').addEventListener('click', async () => {
+    document.getElementById('btnConfirmClear').addEventListener('click', () => {
         if (passwordInput.value === 'Trener') {
             const userToClear = displayedJournal.length > 0 ? displayedJournal[0].user : currentUser;
-            if(confirm(`Вы уверены, что хотите очистить ВЕСЬ журнал для пользователя ${userToClear}? Это действие нельзя отменить.`)) {
+            showConfirm(`Вы уверены, что хотите очистить ВЕСЬ журнал для пользователя ${userToClear}? Это действие нельзя отменить.`, async () => {
                 await saveJournal(userToClear, []);
-                // Если мы смотрим на свой журнал, очищаем и локальную копию
                 if(userToClear === currentUser) {
                     journal = [];
                 }
                 displayedJournal = [];
                 renderJournal([]);
                 alert("Журнал для " + userToClear + " очищен.");
-            }
+            });
         } else {
             alert("Неверный пароль!");
         }
