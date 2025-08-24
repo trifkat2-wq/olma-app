@@ -96,6 +96,7 @@
         table.journal-table{ border-collapse:collapse; width:100%; font-size:14px; }
         .journal-table th,.journal-table td{ border:1px solid #ddd; padding:6px 8px; text-align:left; vertical-align: top; }
         .journal-table th{ background:#f9fafb; }
+        .journal-table select { border: 1px solid #ddd; border-radius: 4px; padding: 2px; }
         .journal-footer{ padding:10px; border-top:1px solid #ddd; text-align:right; display:flex; justify-content:space-between; }
         .btn-export-journal, .btn-clear-journal{
             background:var(--olma-green); color:#fff; border:none;
@@ -209,7 +210,6 @@
         </div>
     </div>
 
-    <!-- НОВОЕ ОКНО ДЛЯ ВВОДА ПАРОЛЯ -->
     <div id="passwordOverlay" class="password-overlay overlay">
         <div class="card password-window" style="width: min(400px, 90vw);">
             <h2>Подтверждение</h2>
@@ -242,7 +242,7 @@
     let DB = {};
     let currentUser = ""; 
     let journal = [];
-    let currentJournalFilters = {}; 
+    let displayedJournal = []; // Отдельный массив для отображения
 
     const dbStatusEl = document.getElementById('dbStatus');
     const importBtn = document.getElementById('btnImport');
@@ -274,7 +274,7 @@
         try {
             await firestore.collection("bases").doc("main").set(newDB);
             alert("База успешно сохранена! Страница будет перезагружена для применения изменений.");
-            window.location.reload(); // ПРИНУДИТЕЛЬНАЯ ПЕРЕЗАГРУЗКА
+            window.location.reload();
         } catch (error) {
             console.error("Ошибка сохранения базы: ", error);
             alert("Не удалось сохранить базу данных.");
@@ -294,10 +294,10 @@
         }
     }
 
-    async function saveJournal() {
-        if (!currentUser) return;
+    async function saveJournal(user, journalData) {
+        if (!user) return;
         try {
-            await firestore.collection("journals").doc(currentUser).set({ entries: journal });
+            await firestore.collection("journals").doc(user).set({ entries: journalData });
         } catch (error) {
             console.error("Ошибка сохранения журнала:", error);
         }
@@ -352,22 +352,9 @@
         r.readAsArrayBuffer(file);
     }
     
-    async function addToJournal(manager, employees){
-        const now = new Date();
-        const formattedDate = now.toLocaleString('ru-RU', {
-            year: 'numeric', month: '2-digit', day: '2-digit',
-            hour: '2-digit', minute: '2-digit'
-        });
-        
-        employees.forEach(emp => {
-            journal.push({
-                user: currentUser,
-                manager: manager,
-                employee: emp,
-                date: formattedDate
-            });
-        });
-        await saveJournal();
+    async function addToJournal(newEntries){
+        journal.push(...newEntries);
+        await saveJournal(currentUser, journal);
     }
     
     function renderJournal(journalData) {
@@ -413,13 +400,22 @@
 
             const table = document.createElement("table");
             table.className = "journal-table";
-            table.innerHTML = `<thead><tr><th>Время</th><th>Кто искал</th><th>Менеджер</th><th>Сотрудник / Магазин</th></tr></thead>`;
+            table.innerHTML = `<thead><tr><th>Кто искал</th><th>Смена</th><th>Менеджер</th><th>Сотрудник / Магазин</th><th>Время</th></tr></thead>`;
             const tbody = document.createElement("tbody");
 
             entriesForDate.forEach(entry => {
                 const tr = document.createElement("tr");
                 const time = entry.date.split(',')[1] || '';
-                tr.innerHTML = `<td>${time}</td><td>${entry.user}</td><td>${entry.manager}</td><td>${entry.employee}</td>`;
+                
+                const shiftSelect = `
+                    <select data-entry-id="${entry.id}" onchange="handleShiftChange(event)">
+                        <option value="1-Смена" ${entry.shift === '1-Смена' ? 'selected' : ''}>1-Смена</option>
+                        <option value="2-Смена" ${entry.shift === '2-Смена' ? 'selected' : ''}>2-Смена</option>
+                        <option value="Открытая смена" ${entry.shift === 'Открытая смена' ? 'selected' : ''}>Открытая</option>
+                    </select>
+                `;
+
+                tr.innerHTML = `<td>${entry.user}</td><td>${shiftSelect}</td><td>${entry.manager}</td><td>${entry.employee}</td><td>${time}</td>`;
                 tbody.appendChild(tr);
             });
 
@@ -428,6 +424,24 @@
             details.appendChild(contentDiv);
             body.appendChild(details);
         });
+    }
+
+    async function handleShiftChange(event) {
+        const entryId = parseFloat(event.target.dataset.entryId);
+        const newShift = event.target.value;
+        const userOfEntry = displayedJournal.find(e => e.id === entryId)?.user;
+
+        if (!userOfEntry) return;
+
+        const userJournal = await loadJournal(userOfEntry);
+        const entryToUpdate = userJournal.find(e => e.id === entryId);
+        
+        if (entryToUpdate) {
+            entryToUpdate.shift = newShift;
+            await saveJournal(userOfEntry, userJournal);
+            const displayedEntry = displayedJournal.find(e => e.id === entryId);
+            if(displayedEntry) displayedEntry.shift = newShift;
+        }
     }
 
     const CODE_RE = /([A-ZА-Я])\s*-?\s*0*(\d+)/ig;
@@ -493,24 +507,53 @@
                 }
             }
         }
+        
+        if(Object.keys(grouped).length===0){ 
+            empty.textContent='Совпадений нет'; 
+        } else {
+            const todayDate = new Date().toLocaleDateString('ru-RU');
+            const todayEntries = journal.filter(e => e.date.startsWith(todayDate));
+            const uniqueSearchIds = [...new Set(todayEntries.map(e => e.searchId))];
+            const shiftCount = uniqueSearchIds.length;
+            let shift;
+            if (shiftCount === 0) shift = '1-Смена';
+            else if (shiftCount === 1) shift = '2-Смена';
+            else shift = 'Открытая смена';
+            
+            const searchId = Date.now();
+            const now = new Date().toLocaleString('ru-RU', {
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit'
+            });
+            const newEntries = [];
 
-        if(Object.keys(grouped).length===0){ empty.textContent='Совпадений нет'; }
-        else{
             for(const [m,arr] of Object.entries(grouped)){
                 const h=document.createElement('div'); h.className='mgr'; h.textContent='Менеджер '+m+':'; out.appendChild(h);
                 const ol=document.createElement('ol');
                 const cleanedArr = arr.map(line => line.replace(/^\d+\.\s*/, ''));
-                cleanedArr.forEach(v=>{ const li=document.createElement('li'); li.textContent=v; ol.appendChild(li); });
+                cleanedArr.forEach(v=>{ 
+                    const li=document.createElement('li'); 
+                    li.textContent=v; 
+                    ol.appendChild(li); 
+                    newEntries.push({
+                        id: Date.now() + Math.random(),
+                        user: currentUser,
+                        manager: m,
+                        employee: v,
+                        date: now,
+                        shift: shift,
+                        searchId: searchId
+                    });
+                });
                 out.appendChild(ol);
-                await addToJournal(m, cleanedArr);
             }
+            await addToJournal(newEntries);
             copyWrap.style.display='block';
         }
         lastExport=grouped;
         ta.value="";
     }
     
-    // ВОССТАНОВЛЕННАЯ ФУНКЦИЯ
     function exportSearch(){
         if(Object.keys(lastExport).length===0){ alert("Нет данных для экспорта"); return; }
         const ws_data=[];
@@ -526,11 +569,12 @@
     }
 
     function exportJournal(){
-        if(journal.length === 0){ alert("Нет данных для экспорта по текущему фильтру"); return; }
+        if(displayedJournal.length === 0){ alert("Нет данных для экспорта по текущему фильтру"); return; }
 
-        const ws_data=[["Дата","Кто искал","Менеджер","Сотрудник / Магазин"]];
-        journal.forEach(entry => {
-            ws_data.push([entry.date, entry.user, entry.manager, entry.employee]);
+        const ws_data=[["Кто искал","Смена","Менеджер","Сотрудник / Магазин", "Дата", "Время"]];
+        displayedJournal.forEach(entry => {
+            const [date, time] = entry.date.split(',');
+            ws_data.push([entry.user, entry.shift, entry.manager, entry.employee, date, time]);
         });
         const ws=XLSX.utils.aoa_to_sheet(ws_data);
         const wb=XLSX.utils.book_new();
@@ -571,7 +615,7 @@
         if (userSelect.value) {
             currentUser = userSelect.value;
             await loadDB(); 
-            await loadJournal(currentUser); 
+            journal = await loadJournal(currentUser); 
             document.getElementById("welcomeOverlay").style.display = "none";
             document.getElementById("mainApp").style.display = "block";
         } else {
@@ -595,18 +639,18 @@
 
     document.getElementById("btnApplyFilter").addEventListener("click", async () => {
         const selectedUser = document.getElementById('filterUser').value;
-        currentJournalFilters = { user: selectedUser };
         
         let journalData = [];
         if (selectedUser === 'all') {
-            const querySnapshot = await firestore.collection("journals").get();
-            querySnapshot.forEach((doc) => {
+            const journalsRef = firestore.collection("journals");
+            const snapshot = await journalsRef.get();
+            snapshot.forEach(doc => {
                 journalData = journalData.concat(doc.data().entries || []);
             });
         } else {
             journalData = await loadJournal(selectedUser);
         }
-        journal = journalData; // Обновляем глобальную переменную для экспорта
+        displayedJournal = journalData;
         renderJournal(journalData);
         document.getElementById("filterOverlay").style.display = "none";
         document.getElementById("journalOverlay").style.display = "flex";
@@ -624,16 +668,15 @@
     });
     document.getElementById('btnConfirmClear').addEventListener('click', async () => {
         if (passwordInput.value === 'Trener') {
-            const userToClear = currentJournalFilters.user || currentUser;
-            if(userToClear === 'all'){
-                alert("Нельзя очистить журнал для всех пользователей сразу. Выберите конкретного пользователя.");
-                passwordOverlay.style.display = 'none';
-                return;
-            }
-            if (confirm(`Вы уверены, что хотите очистить ВЕСЬ журнал для пользователя ${userToClear}? Это действие нельзя отменить.`)) {
-                journal = [];
-                await firestore.collection("journals").doc(userToClear).set({ entries: [] });
-                renderJournal(journal);
+            const userToClear = displayedJournal.length > 0 ? displayedJournal[0].user : currentUser;
+            if(confirm(`Вы уверены, что хотите очистить ВЕСЬ журнал для пользователя ${userToClear}? Это действие нельзя отменить.`)) {
+                await saveJournal(userToClear, []);
+                // Если мы смотрим на свой журнал, очищаем и локальную копию
+                if(userToClear === currentUser) {
+                    journal = [];
+                }
+                displayedJournal = [];
+                renderJournal([]);
                 alert("Журнал для " + userToClear + " очищен.");
             }
         } else {
@@ -642,7 +685,18 @@
         passwordInput.value = '';
         passwordOverlay.style.display = 'none';
     });
-
+    
+    document.getElementById('input').addEventListener('keydown', function(event) {
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault(); 
+            document.getElementById('btnSearch').click();
+        }
+    });
+    document.getElementById('passwordInput').addEventListener('keydown', function(event) {
+        if (event.key === 'Enter') {
+            document.getElementById('btnConfirmClear').click();
+        }
+    });
 
 </script>
 </body>
