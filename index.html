@@ -22,24 +22,20 @@
             font-family: Arial, Helvetica, sans-serif;
             background:#f3f4f6;
             display:flex;
-            flex-direction: column; /* ИЗМЕНЕНИЕ 5: Для вертикального расположения */
+            flex-direction: column;
             align-items:center;
-            justify-content:center;
             min-height:100vh;
-            padding: 16px 0;
         }
 
-        /* ИЗМЕНЕНИЕ 5: Стили для новой верхней панели */
         .top-nav {
             width: 100%;
             background-color: #ffffff;
             box-shadow: 0 4px 12px rgba(0,0,0,0.08);
             padding: 12px 16px;
-            margin-bottom: 24px;
             display: flex;
             justify-content: center;
             gap: 12px;
-            order: -1; /* Чтобы панель была всегда вверху */
+            order: -1; 
         }
         .top-nav .btn-journal {
              box-shadow: none;
@@ -53,9 +49,9 @@
             width: 100%;
             display: flex;
             justify-content: center;
+            padding: 24px 0;
         }
-        /* Конец изменений 5 */
-
+        
         .card{
             width: min(var(--card-w), 96vw);
             background:#fff;
@@ -173,7 +169,20 @@
 <body>
     <div id="welcomeOverlay" class="overlay">
         <div class="card welcome-card">
-            </div>
+            <img class="logo" src="logo_olma_hd_transparent.png" alt="Olma Market" onerror="this.style.display='none'">
+            <h1>Привет!</h1>
+            <p>Выберите свое ФИО, чтобы начать работу.</p>
+            <select id="userSelect">
+                <option value="" disabled selected>Выберите пользователя</option>
+                <option value="Тимаев Рифкат">Тимаев Рифкат</option>
+                <option value="Гуламова Сабина">Гуламова Сабина</option>
+                <option value="Турсунова Умида">Турсунова Умида</option>
+                <option value="Дониер Алибаев">Дониер Алибаев</option>
+                <option value="Наталия Юсупова">Наталия Юсупова</option>
+                <option value="Шахноза Рахманкулова">Шахноза Рахманкулова</option>
+            </select>
+            <button class="btn btn-red" id="btnStart">Начать</button>
+        </div>
     </div>
 
     <div class="top-nav" id="topNav" style="display: none;">
@@ -186,10 +195,105 @@
         <div class="card">
             <img class="logo" src="logo_olma_hd_transparent.png" alt="Olma Market" onerror="this.style.display='none'">
             <h1>Поиск менеджера</h1>
+            <textarea id="input" placeholder="Введите текст"></textarea>
+            <button class="btn btn-red" id="btnSearch">Показать менеджера</button>
+            <button class="btn btn-green" id="btnExport">Экспорт поиска в Excel</button>
+            <input type="file" id="fileInput" accept=".xlsx,.xls" hidden>
+            <button class="btn btn-yellow" id="btnImport">Импорт базы из Excel</button>
+            <div id="results" class="results"></div>
+            <div id="copyWrap" class="copy-wrap" style="display: none;">
+                <button id="btnCopy" class="copy-btn"><svg viewBox="0 0 24 24"><path d="M16 2h-1.18A3 3 0 0 0 12 0a3 3 0 0 0-2.82 2H8a2 2 0 0 0-2 2v2h12V4a2 2 0 0 0-2-2zM6 8v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8H6z"/></svg></button>
             </div>
+            <div id="emptyMsg" class="muted"></div>
+            <div id="dbStatus" class="muted" style="font-size: 12px; margin-top: 5px; font-weight: bold;"></div>
+        </div>
     </div>
     
-    <div id="uploadTrainingOverlay" class="overlay" style="display: none;">
+    <div id="journalOverlay" class="overlay" style="display: none;">
+        <div class="journal-window">
+            <div class="journal-header">
+                <h2 id="journalTitle">Журнал поиска</h2>
+                <button class="journal-close" id="closeJournal">×</button>
+            </div>
+            <div class="journal-body" id="journalBody"></div>
+            <div class="journal-footer">
+                <button class="btn-clear-journal" id="btnClearJournal">Очистить журнал</button>
+                <button class="btn-export-journal" id="btnExportJournal">Экспорт журнала</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="filterOverlay" class="overlay" style="display: none;">
+        <div class="card modal-window" style="width: min(400px, 90vw);">
+            <h2>Фильтр журнала</h2>
+            <div class="form-group">
+                <label for="filterUser">Пользователь</label>
+                <select id="filterUser"></select>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn" id="btnCancelFilter" style="background-color: #6b7280;">Отмена</button>
+                <button class="btn btn-green" id="btnApplyFilter">Показать</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="passwordOverlay" class="password-overlay overlay" style="display: none;">
+        <div class="card modal-window" style="width: min(400px, 90vw);">
+            <h2>Подтверждение</h2>
+            <p>Для этого действия введите пароль администратора.</p>
+            <div class="form-group">
+                <label for="passwordInput">Пароль</label>
+                <input type="password" id="passwordInput">
+            </div>
+            <div class="modal-buttons">
+                <button class="btn" id="btnCancelClear" style="background-color: #6b7280;">Отмена</button>
+                <button class="btn btn-red" id="btnConfirmClear">Подтвердить</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="confirmOverlay" class="confirm-overlay overlay" style="display: none;">
+         <div class="card modal-window" style="width: min(400px, 90vw);">
+            <h2 id="confirmTitle">Подтвердите действие</h2>
+            <p id="confirmMessage">Вы уверены?</p>
+            <div class="modal-buttons">
+                <button class="btn" id="btnCancelAction" style="background-color: #6b7280;">Отмена</button>
+                <button class="btn btn-red" id="btnConfirmAction">Да, уверен</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="trainingOverlay" class="training-overlay overlay" style="display: none;">
+        <div class="journal-window" style="width: min(600px, 90vw); height: 70vh;">
+            <div class="journal-header">
+                <h2>Список на тренинг</h2>
+                <button class="journal-close" id="closeTraining">×</button>
+            </div>
+            <div class="journal-body">
+                <h3 id="trainingStatus" style="text-align: center; margin-bottom: 15px;">Загрузка...</h3>
+                <ol id="trainingListContainer"></ol>
+            </div>
+            <div class="journal-footer">
+                <button class="btn-export-journal" id="btnEditTrainingList">Редактировать список</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="guestOverlay" class="guest-overlay overlay" style="display: none;">
+        <div class="journal-window" style="width: min(700px, 90vw); height: 70vh;">
+            <div class="journal-header">
+                <h2>Журнал Гостей</h2>
+                <button class="journal-close" id="closeGuests">×</button>
+            </div>
+            <div class="journal-body" id="guestListContainer"></div>
+            <div class="journal-footer">
+                <button class="btn-clear-journal" id="btnClearGuests">Очистить журнал гостей</button>
+                <button class="btn-export-journal" id="btnExportGuests">Экспорт в Excel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="uploadTrainingOverlay" class="upload-training-overlay overlay" style="display: none;">
         <div class="card modal-window" style="width: min(500px, 90vw);">
             <h2>Редактирование списка</h2>
             <p>Добавьте, удалите или исправьте ФИО. Каждый сотрудник с новой строки.</p>
@@ -200,66 +304,241 @@
             </div>
         </div>
     </div>
-    
+
+    <div id="toast" class="toast">
+        <span id="toastMessage"></span>
+    </div>
+
 <script>
-    // ... Firebase Config ...
+    const firebaseConfig = {
+      apiKey: "AIzaSyDHrpashKVWzfqRWwp2fmrhfkvVNYEcMFI",
+      authDomain: "olma-market-db.firebaseapp.com",
+      projectId: "olma-market-db",
+      storageBucket: "olma-market-db.appspot.com",
+      messagingSenderId: "177102940053",
+      appId: "1:77102940053:web:d799ea7b8c9e71b704789c"
+    };
 
-    // ... Глобальные переменные ...
+    firebase.initializeApp(firebaseConfig);
+    const firestore = firebase.firestore();
 
-    // ... Функции showToast, showConfirm, requestPassword ...
+    let DB = {}, currentUser = "", journal = [], displayedJournal = [], trainingList = [], guestList = [], initialTrainingListSize = 0;
+    const dbStatusEl = document.getElementById('dbStatus'), importBtn = document.getElementById('btnImport');
+    
+    let toastTimeout;
+    function showToast(message, isError = false) {
+        const toast = document.getElementById('toast');
+        const toastMessage = document.getElementById('toastMessage');
+        clearTimeout(toastTimeout);
+        toastMessage.textContent = message;
+        toast.className = 'toast';
+        if (isError) toast.classList.add('error');
+        toast.classList.add('show');
+        toastTimeout = setTimeout(() => { toast.classList.remove('show'); }, 3000);
+    }
 
-    // ... Функции для работы с Firebase (loadDB, saveDB, и т.д.) ...
+    function showConfirm(message, onConfirm) {
+        const confirmOverlay = document.getElementById('confirmOverlay');
+        document.getElementById('confirmMessage').textContent = message;
+        confirmOverlay.style.display = 'flex';
+        const btnConfirm = document.getElementById('btnConfirmAction');
+        const btnCancel = document.getElementById('btnCancelAction');
+        const confirmHandler = () => { onConfirm(); cleanup(); };
+        const cancelHandler = () => { cleanup(); };
+        const cleanup = () => {
+            confirmOverlay.style.display = 'none';
+            btnConfirm.removeEventListener('click', confirmHandler);
+            btnCancel.removeEventListener('click', cancelHandler);
+        };
+        btnConfirm.addEventListener('click', confirmHandler, { once: true });
+        btnCancel.addEventListener('click', cancelHandler, { once: true });
+    }
 
-    // ИЗМЕНЕНИЯ 3 и 4: Новые функции для "умного" сравнения
+    let passwordSuccessCallback = null;
+    function requestPassword(onSuccess) {
+        passwordSuccessCallback = onSuccess;
+        document.getElementById('passwordInput').value = '';
+        document.getElementById('passwordOverlay').style.display = 'flex';
+    }
+    
+    document.getElementById('btnConfirmClear').addEventListener('click', () => {
+        const passwordInput = document.getElementById('passwordInput');
+        if (passwordInput.value === 'Trener') {
+            if (passwordSuccessCallback) passwordSuccessCallback();
+        } else {
+            showToast("Неверный пароль!", true);
+        }
+        passwordInput.value = '';
+        document.getElementById('passwordOverlay').style.display = 'none';
+        passwordSuccessCallback = null;
+    });
+     document.getElementById('btnCancelClear').addEventListener('click', () => {
+        document.getElementById('passwordInput').value = '';
+        document.getElementById('passwordOverlay').style.display = 'none';
+        passwordSuccessCallback = null;
+    });
+
+    async function loadDB() {
+        dbStatusEl.textContent = 'Загрузка базы данных...';
+        importBtn.disabled = true;
+        try {
+            const doc = await firestore.collection("bases").doc("main").get();
+            if (doc.exists && Object.keys(doc.data()).length > 0) {
+                DB = doc.data();
+                dbStatusEl.textContent = `База загружена: ${Object.keys(DB).length} менеджеров`;
+            } else {
+                DB = {};
+                dbStatusEl.textContent = 'База не найдена. Импортируйте файл Excel.';
+            }
+        } catch (error) {
+            console.error("Ошибка загрузки базы: ", error);
+            dbStatusEl.textContent = 'Ошибка загрузки базы.';
+        } finally {
+            importBtn.disabled = false;
+        }
+    }
+
+    async function saveDB(newDB) {
+        dbStatusEl.textContent = 'Сохранение базы на сервере...';
+        importBtn.disabled = true;
+        try {
+            await firestore.collection("bases").doc("main").set(newDB);
+            showToast("База успешно сохранена!");
+            setTimeout(() => window.location.reload(), 1500);
+        } catch (error) {
+            console.error("Ошибка сохранения базы: ", error);
+            showToast("Не удалось сохранить базу данных.", true);
+            dbStatusEl.textContent = 'Ошибка сохранения.';
+            importBtn.disabled = false;
+        }
+    }
+
+    async function loadJournal(user) {
+        if (!user) return [];
+        try {
+            const doc = await firestore.collection("journals").doc(user).get();
+            return doc.exists ? (doc.data().entries || []) : [];
+        } catch (error) {
+            console.error("Ошибка загрузки журнала:", error);
+            return [];
+        }
+    }
+
+    async function saveJournal(user, journalData) {
+        if (!user) return;
+        try {
+            await firestore.collection("journals").doc(user).set({ entries: journalData });
+        } catch (error) {
+            console.error("Ошибка сохранения журнала:", error);
+        }
+    }
+
+    async function loadTrainingList() {
+        try {
+            const doc = await firestore.collection("app_data").doc("training").get();
+            if (doc.exists) {
+                trainingList = doc.data().fio_list || [];
+                initialTrainingListSize = doc.data().initial_size || trainingList.length;
+            } else {
+                trainingList = [];
+                initialTrainingListSize = 0;
+            }
+        } catch (error) {
+            console.error("Ошибка загрузки списка на тренинг:", error);
+            trainingList = [];
+            initialTrainingListSize = 0;
+        }
+    }
+
+    async function saveTrainingList(newList, isNewUpload = false) {
+        try {
+            const dataToSave = { fio_list: newList };
+            if (isNewUpload) {
+                dataToSave.initial_size = newList.length;
+            } else {
+                dataToSave.initial_size = initialTrainingListSize;
+            }
+            await firestore.collection("app_data").doc("training").set(dataToSave, { merge: true });
+            showToast("Список на тренинг обновлен!");
+            await loadTrainingList();
+        } catch (error) {
+            console.error("Ошибка сохранения списка на тренинг:", error);
+            showToast("Ошибка сохранения списка.", true);
+        }
+    }
+
+    async function loadGuestList() {
+        try {
+            const doc = await firestore.collection("app_data").doc("guests").get();
+            guestList = doc.exists ? (doc.data().entries || []) : [];
+        } catch (error) {
+            console.error("Ошибка загрузки журнала гостей:", error);
+            guestList = [];
+        }
+    }
+
+    async function saveGuestList(updatedGuestList) {
+        try {
+            await firestore.collection("app_data").doc("guests").set({ entries: updatedGuestList });
+        } catch (error) {
+            console.error("Ошибка сохранения журнала гостей:", error);
+        }
+    }
+    
     function transliterate(text) {
         text = text.toLowerCase();
-        const a = {"Ё":"YO","Й":"I","Ц":"TS","У":"U","К":"K","Е":"E","Н":"N","Г":"G","Ш":"SH","Щ":"SCH","З":"Z","Х":"H","Ъ":"'","ё":"yo","й":"i","ц":"ts","у":"u","к":"k","е":"e","н":"n","г":"g","ш":"sh","щ":"sch","з":"z","х":"h","ъ":"'","Ф":"F","Ы":"I","В":"V","А":"a","П":"P","Р":"R","О":"O","Л":"L","Д":"D","Ж":"ZH","Э":"E","ф":"f","ы":"i","в":"v","а":"a","п":"p","р":"r","о":"o","л":"l","д":"d","ж":"zh","э":"e","Я":"Ya","Ч":"CH","С":"S","М":"M","И":"I","Т":"T","Ь":"'","Б":"B","Ю":"YU","я":"ya","ч":"ch","с":"s","м":"m","и":"i","т":"t","ь":"'","б":"b","ю":"yu"};
+        const a = {"ё":"yo","й":"i","ц":"ts","у":"u","к":"k","е":"e","н":"n","г":"g","ш":"sh","щ":"sch","з":"z","х":"h","ъ":"'","ф":"f","ы":"i","в":"v","а":"a","п":"p","р":"r","о":"o","л":"l","д":"d","ж":"zh","э":"e","я":"ya","ч":"ch","с":"s","м":"m","и":"i","т":"t","ь":"'","б":"b","ю":"yu","Ё":"YO","Й":"I","Ц":"TS","У":"U","К":"K","Е":"E","Н":"N","Г":"G","Ш":"SH","Щ":"SCH","З":"Z","Х":"H","Ъ":"'","Ф":"F","Ы":"I","В":"V","А":"a","П":"P","Р":"R","О":"O","Л":"L","Д":"D","Ж":"ZH","Э":"E","Я":"Ya","Ч":"CH","С":"S","М":"M","И":"I","Т":"T","Ь":"'","Б":"B","Ю":"YU"};
         return text.split('').map(char => a[char] || char).join("");
     }
 
     function similarity(s1, s2) {
-        let longer = s1;
-        let shorter = s2;
-        if (s1.length < s2.length) {
-            longer = s2;
-            shorter = s1;
-        }
+        let longer = s1, shorter = s2;
+        if (s1.length < s2.length) { longer = s2; shorter = s1; }
         const longerLength = longer.length;
-        if (longerLength === 0) {
-            return 1.0;
-        }
+        if (longerLength === 0) return 1.0;
         return (longerLength - editDistance(longer, shorter)) / parseFloat(longerLength);
     }
 
     function editDistance(s1, s2) {
-        s1 = s1.toLowerCase();
-        s2 = s2.toLowerCase();
         const costs = [];
         for (let i = 0; i <= s1.length; i++) {
             let lastValue = i;
             for (let j = 0; j <= s2.length; j++) {
-                if (i === 0) {
-                    costs[j] = j;
-                } else {
-                    if (j > 0) {
-                        let newValue = costs[j - 1];
-                        if (s1.charAt(i - 1) !== s2.charAt(j - 1)) {
-                            newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
-                        }
-                        costs[j - 1] = lastValue;
-                        lastValue = newValue;
-                    }
+                if (i === 0) costs[j] = j;
+                else if (j > 0) {
+                    let newValue = costs[j - 1];
+                    if (s1.charAt(i - 1) !== s2.charAt(j - 1)) newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
+                    costs[j - 1] = lastValue;
+                    lastValue = newValue;
                 }
             }
             if (i > 0) costs[s2.length] = lastValue;
         }
         return costs[s2.length];
     }
-    // Конец изменений 3 и 4
-
-    // ... Остальные функции (doImportFromExcel, render..., и т.д.) ...
     
-    // ИЗМЕНЕНИЕ 1: Полностью переработанная логика doSearch
+    const CODE_RE = /([A-ZА-Я])\s*-?\s*0*(\d+)/ig;
+    function normalizeCode(letter, numberStr) {
+        const letterMap = { 'М': 'M', 'А': 'A', 'К': 'K', 'С': 'C', 'Р': 'R' };
+        return `${letterMap[letter.toUpperCase()] || letter.toUpperCase()}-${parseInt(numberStr, 10)}`;
+    }
+
+    function buildCodeMap(db){
+        const map = {};
+        for (const [manager, codes] of Object.entries(db)) {
+            if (Array.isArray(codes)) {
+                for (const code of codes) {
+                    CODE_RE.lastIndex = 0;
+                    const match = CODE_RE.exec(String(code));
+                    if (match) map[normalizeCode(match[1], match[2])] = manager;
+                }
+            }
+        }
+        return map;
+    }
+
+    let lastExport={};
+
     async function doSearch() {
         const ta = document.getElementById('input');
         const raw = ta.value.trim();
@@ -274,11 +553,10 @@
         const lines = raw.split(/\n/).map(s => s.trim()).filter(Boolean);
         const codeMap = buildCodeMap(DB);
         const grouped = {};
-        const guests = [];
+        let guests = [];
         const guestRegex = /\b(ТМ|АМ|ЗМ|РМ)\b/i;
         
-        // Создаем подготовленный для поиска список тренинга
-        const trainingSet = trainingList.map(fio => transliterate(fio));
+        const preparedTrainingList = trainingList.map(fio => transliterate(fio));
 
         for (const line of lines) {
             let hasManager = false;
@@ -287,8 +565,7 @@
             CODE_RE.lastIndex = 0;
             let match;
             while ((match = CODE_RE.exec(line)) !== null) {
-                const normalizedCode = normalizeCode(match[1], match[2]);
-                const manager = codeMap[normalizedCode];
+                const manager = codeMap[normalizeCode(match[1], match[2])];
                 if (manager) {
                     if (!grouped[manager]) grouped[manager] = [];
                     if (!grouped[manager].includes(line)) grouped[manager].push(line);
@@ -299,19 +576,16 @@
             let isInTraining = false;
             if (hasManager) {
                 const preparedLine = transliterate(line);
-                for (const trainingFio of trainingSet) {
-                    if (similarity(preparedLine, trainingFio) > 0.6) {
+                for (const trainingFio of preparedTrainingList) {
+                    if (similarity(preparedLine, trainingFio) > 0.65) {
                         isInTraining = true;
                         break;
                     }
                 }
             }
             
-            // Определяем, кто является гостем по новым правилам
             if (isGuestByCode || !hasManager || (hasManager && !isInTraining)) {
                 guests.push(line);
-                // Если сотрудник был найден, но попал в гости (т.к. не в списке тренинга),
-                // его нужно убрать из основного списка `grouped`
                 if (hasManager) {
                     for (const manager in grouped) {
                         grouped[manager] = grouped[manager].filter(item => item !== line);
@@ -324,33 +598,48 @@
         const now = new Date().toLocaleString('ru-RU', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 
         if (guests.length > 0) {
-            // ... логика сохранения гостей
+            const newGuestEntries = guests.map(g => ({ id: Date.now() + Math.random(), user: currentUser, text: g, date: now }));
+            const updatedGuestList = [...new Set([...guestList.map(g => g.text), ...newGuestEntries.map(g => g.text)])]
+                .map(text => guestList.find(g => g.text === text) || newGuestEntries.find(g => g.text === text));
+
+            await saveGuestList(updatedGuestList);
+            await loadGuestList();
+            showToast(`${guests.length} чел. добавлено в журнал гостей.`);
         }
 
         if (Object.keys(grouped).length > 0) {
-            // ... логика отображения найденных
-            // ... логика записи в журнал
-            
-            // Обновленная логика "минусования" из тренинга
-            const foundEmployeesLines = Object.values(grouped).flat();
+            const searchId = Date.now();
+            const newJournalEntries = [];
+            for (const [m, arr] of Object.entries(grouped)) {
+                const h = document.createElement('div'); h.className = 'mgr'; h.textContent = `Менеджер ${m}:`; out.appendChild(h);
+                const ol = document.createElement('ol');
+                arr.forEach(v => {
+                    const li = document.createElement('li'); li.textContent = v; ol.appendChild(li);
+                    newJournalEntries.push({ id: Date.now() + Math.random(), user: currentUser, manager: m, employee: v, date: now, shift: '1-Смена', searchId: searchId });
+                });
+                out.appendChild(ol);
+            }
+            const todayDate = new Date().toLocaleDateString('ru-RU');
+            const todaySearches = new Set(journal.filter(e => e.date.startsWith(todayDate)).map(e => e.searchId)).size;
+            const shift = todaySearches === 0 ? '1-Смена' : todaySearches === 1 ? '2-Смена' : 'Открытая смена';
+            newJournalEntries.forEach(e => e.shift = shift);
+            await addToJournal(newJournalEntries);
+            copyWrap.style.display = 'block';
+
+            const foundLines = Object.values(grouped).flat().map(line => transliterate(line));
             let updatedTrainingList = [...trainingList];
             let removedCount = 0;
-
             updatedTrainingList = updatedTrainingList.filter(fio => {
                 const preparedFio = transliterate(fio);
-                for (const line of foundEmployeesLines) {
-                    if (similarity(transliterate(line), preparedFio) > 0.6) {
+                for (const line of foundLines) {
+                    if (similarity(line, preparedFio) > 0.65) {
                         removedCount++;
-                        return false; // Нашли совпадение, удаляем из списка
+                        return false;
                     }
                 }
-                return true; // Совпадений не найдено, оставляем
+                return true;
             });
-
-            if (removedCount > 0) {
-                await saveTrainingList(updatedTrainingList);
-                showToast(`Отмечено в списке на тренинг: ${removedCount} чел.`);
-            }
+            if (removedCount > 0) await saveTrainingList(updatedTrainingList);
 
         } else if(guests.length === 0) {
              empty.textContent = 'Совпадений нет';
@@ -359,27 +648,45 @@
         lastExport = grouped;
         ta.value = "";
     }
-
+    
+    // ... All other functions like export, copy, render, etc. ...
+    
+    document.addEventListener("DOMContentLoaded", populateUserFilter);
 
     document.getElementById("btnStart").addEventListener("click", async () => {
-        // ...
-        document.getElementById("mainApp").style.display = "flex"; // ИЗМЕНЕНИЕ 5
-        document.getElementById("topNav").style.display = "flex"; // ИЗМЕНЕНИЕ 5
-        // ...
+        const userSelect = document.getElementById("userSelect");
+        if (userSelect.value) {
+            currentUser = userSelect.value;
+            await loadDB(); 
+            journal = await loadJournal(currentUser); 
+            await loadTrainingList();
+            await loadGuestList();
+            checkTrainingReminder();
+            document.getElementById("welcomeOverlay").style.display = "none";
+            document.getElementById("mainApp").style.display = "flex";
+            document.getElementById("topNav").style.display = "flex";
+        } else {
+            showToast("Пожалуйста, выберите ваше ФИО", true);
+        }
     });
     
-    // ИЗМЕНЕНИЕ 2: Обработчик кнопки редактирования списка тренинга
+    // ... All other event listeners ...
+    
     document.getElementById('btnTraining').addEventListener('click', () => {
-        document.getElementById('trainingListInput').value = trainingList.join('\n');
-        renderTrainingList(); // Сначала рендерим, чтобы видеть статус
+        renderTrainingList();
         document.getElementById('trainingOverlay').style.display = 'flex';
     });
-
-    document.getElementById('btnUploadTrainingList').addEventListener('click', () => {
+    document.getElementById('btnEditTrainingList').addEventListener('click', () => {
         document.getElementById('trainingListInput').value = trainingList.join('\n');
         document.getElementById('uploadTrainingOverlay').style.display = 'flex';
     });
-
+    document.getElementById('btnSaveTrainingList').addEventListener('click', async () => {
+        const text = document.getElementById('trainingListInput').value.trim();
+        const newList = text.split('\n').map(line => line.trim()).filter(Boolean);
+        await saveTrainingList(newList, true);
+        renderTrainingList();
+        document.getElementById('uploadTrainingOverlay').style.display = 'none';
+    });
 </script>
 </body>
 </html>
