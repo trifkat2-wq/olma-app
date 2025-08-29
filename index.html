@@ -599,12 +599,14 @@
 
         if (guests.length > 0) {
             const newGuestEntries = guests.map(g => ({ id: Date.now() + Math.random(), user: currentUser, text: g, date: now }));
-            const updatedGuestList = [...new Set([...guestList.map(g => g.text), ...newGuestEntries.map(g => g.text)])]
-                .map(text => guestList.find(g => g.text === text) || newGuestEntries.find(g => g.text === text));
+            const currentGuestTexts = new Set(guestList.map(g => g.text));
+            const trulyNewEntries = newGuestEntries.filter(g => !currentGuestTexts.has(g.text));
 
-            await saveGuestList(updatedGuestList);
-            await loadGuestList();
-            showToast(`${guests.length} чел. добавлено в журнал гостей.`);
+            if (trulyNewEntries.length > 0) {
+                await saveGuestList([...guestList, ...trulyNewEntries]);
+                await loadGuestList();
+                showToast(`${trulyNewEntries.length} чел. добавлено в журнал гостей.`);
+            }
         }
 
         if (Object.keys(grouped).length > 0) {
@@ -639,7 +641,10 @@
                 }
                 return true;
             });
-            if (removedCount > 0) await saveTrainingList(updatedTrainingList);
+            if (removedCount > 0) {
+                 await saveTrainingList(updatedTrainingList);
+                 showToast(`Отмечено в списке на тренинг: ${removedCount} чел.`);
+            }
 
         } else if(guests.length === 0) {
              empty.textContent = 'Совпадений нет';
@@ -649,7 +654,216 @@
         ta.value = "";
     }
     
-    // ... All other functions like export, copy, render, etc. ...
+    function doImportFromExcel(file){
+        const r = new FileReader();
+        r.onload = e => {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const wb = XLSX.read(data, {type:'array'});
+                const ws = wb.Sheets[wb.SheetNames[0]];
+                const rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:false});
+                
+                const newDB = {};
+                if (rows.length < 1) { showToast("Файл Excel пуст.", true); return; }
+                const firstRowCell = String(rows[0][0] || '').toLowerCase();
+                const startingRow = (firstRowCell.includes('менеджер') || firstRowCell.includes('manager')) ? 1 : 0;
+                for (let i = startingRow; i < rows.length; i++) {
+                    const row = rows[i];
+                    const manager = String(row[0] || '').trim();
+                    const codesString = String(row[1] || '').trim();
+                    if (!manager || !codesString) continue;
+                    const codesArray = codesString.split(',').map(code => code.trim()).filter(Boolean);
+                    if (codesArray.length > 0) newDB[manager] = codesArray;
+                }
+                if (Object.keys(newDB).length === 0) { showToast("Не удалось распознать данные в файле.", true); return; }
+                showConfirm(`Найдено ${Object.keys(newDB).length} менеджеров. Обновить общую базу?`, () => saveDB(newDB));
+            } catch (error) {
+                console.error("Ошибка при чтении файла Excel:", error);
+                showToast("Ошибка при чтении файла Excel.", true);
+            }
+        };
+        r.readAsArrayBuffer(file);
+    }
+    
+    async function addToJournal(newEntries){
+        journal.push(...newEntries);
+        await saveJournal(currentUser, journal);
+    }
+    
+    function renderJournal(journalData) {
+        const body = document.getElementById("journalBody");
+        body.innerHTML = "";
+        if (journalData.length === 0) {
+            body.innerHTML = "<p class='muted' style='text-align:center;'>Записей в журнале нет</p>";
+            return;
+        }
+        journalData.sort((a,b) => new Date(b.id) - new Date(a.id));
+        const groupedByDate = {};
+        journalData.forEach(entry => {
+            const dateKey = entry.date.split(',')[0]; 
+            if (!groupedByDate[dateKey]) groupedByDate[dateKey] = [];
+            groupedByDate[dateKey].push(entry);
+        });
+        const sortedDates = Object.keys(groupedByDate).sort((a, b) => {
+             const dateA = a.split('.').reverse().join('-');
+             const dateB = b.split('.').reverse().join('-');
+             return new Date(dateB) - new Date(dateA);
+        });
+        sortedDates.forEach((date) => {
+            const entriesForDate = groupedByDate[date];
+            const details = document.createElement("details");
+            details.className = "date-group";
+            details.open = true;
+            const summary = document.createElement("summary");
+            summary.textContent = date;
+            details.appendChild(summary);
+            const contentDiv = document.createElement("div");
+            contentDiv.className = "date-content";
+            const table = document.createElement("table");
+            table.className = "journal-table";
+            table.innerHTML = `<thead><tr><th>Кто искал</th><th>Смена</th><th>Менеджер</th><th>Сотрудник / Магазин</th><th>Время</th></tr></thead>`;
+            const tbody = document.createElement("tbody");
+            entriesForDate.forEach(entry => {
+                const tr = document.createElement("tr");
+                const time = entry.date.split(',')[1] || '';
+                const shiftSelect = `<select data-entry-id="${entry.id}" onchange="handleShiftChange(event)">
+                        <option value="1-Смена" ${entry.shift === '1-Смена' ? 'selected' : ''}>1-Смена</option>
+                        <option value="2-Смена" ${entry.shift === '2-Смена' ? 'selected' : ''}>2-Смена</option>
+                        <option value="Открытая смена" ${entry.shift === 'Открытая смена' ? 'selected' : ''}>Открытая</option>
+                    </select>`;
+                tr.innerHTML = `<td>${entry.user}</td><td>${shiftSelect}</td><td>${entry.manager}</td><td>${entry.employee}</td><td>${time}</td>`;
+                tbody.appendChild(tr);
+            });
+            table.appendChild(tbody);
+            contentDiv.appendChild(table);
+            details.appendChild(contentDiv);
+            body.appendChild(details);
+        });
+    }
+
+    function renderTrainingList() {
+        const container = document.getElementById('trainingListContainer');
+        const statusEl = document.getElementById('trainingStatus');
+        container.innerHTML = '';
+        if (trainingList.length === 0) {
+            statusEl.textContent = 'Список пуст. Все сотрудники обработаны! 🎉';
+            return;
+        }
+        statusEl.textContent = `Осталось обработать: ${trainingList.length} из ${initialTrainingListSize}`;
+        trainingList.forEach(item => {
+            const li = document.createElement('li');
+            li.textContent = item;
+            container.appendChild(li);
+        });
+    }
+
+    function renderGuestList() {
+        const container = document.getElementById('guestListContainer');
+        container.innerHTML = "";
+        if (guestList.length === 0) {
+            container.innerHTML = "<p class='muted' style='text-align:center;'>Журнал гостей пуст</p>";
+            return;
+        }
+        const sortedGuests = [...guestList].sort((a,b) => new Date(b.id) - new Date(a.id));
+        const table = document.createElement("table");
+        table.className = "journal-table";
+        table.innerHTML = `<thead><tr><th>Запись</th><th>Кто добавил</th><th>Дата и время</th></tr></thead>`;
+        const tbody = document.createElement("tbody");
+        sortedGuests.forEach(guest => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `<td>${guest.text}</td><td>${guest.user}</td><td>${guest.date}</td>`;
+            tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        container.appendChild(table);
+    }
+
+    async function handleShiftChange(event) {
+        const entryId = parseFloat(event.target.dataset.entryId);
+        const newShift = event.target.value;
+        const userOfEntry = displayedJournal.find(e => e.id === entryId)?.user;
+        if (!userOfEntry) return;
+        const userJournal = await loadJournal(userOfEntry);
+        const entryToUpdate = userJournal.find(e => e.id === entryId);
+        if (entryToUpdate) {
+            entryToUpdate.shift = newShift;
+            await saveJournal(userOfEntry, userJournal);
+            const displayedEntry = displayedJournal.find(e => e.id === entryId);
+            if(displayedEntry) displayedEntry.shift = newShift;
+        }
+    }
+
+    function exportSearch(){
+        if(Object.keys(lastExport).length===0){ showToast("Нет данных для экспорта", true); return; }
+        const ws_data=[];
+        for(const [m,arr] of Object.entries(lastExport)){
+            ws_data.push([`Менеджер ${m}:`]);
+            arr.forEach((v,i)=>ws_data.push([`${i+1}. ${v}`]));
+            ws_data.push([]);
+        }
+        const ws=XLSX.utils.aoa_to_sheet(ws_data);
+        const wb=XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb,ws,"Результаты");
+        XLSX.writeFile(wb,"olma-search.xlsx");
+    }
+
+    function exportJournal(){
+        if(displayedJournal.length === 0){ showToast("Нет данных для экспорта.", true); return; }
+        const ws_data=[["Кто искал","Смена","Менеджер","Сотрудник / Магазин", "Дата", "Время"]];
+        displayedJournal.forEach(entry => {
+            const [date, time] = entry.date.split(',');
+            ws_data.push([entry.user, entry.shift, entry.manager, entry.employee, date, time]);
+        });
+        const ws=XLSX.utils.aoa_to_sheet(ws_data);
+        const wb=XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb,ws,"Журнал");
+        XLSX.writeFile(wb,`olma-journal-export.xlsx`);
+    }
+
+    function exportGuests() {
+        if (guestList.length === 0) { showToast("Журнал гостей пуст.", true); return; }
+        const ws_data = [["Запись", "Кто добавил", "Дата и время"]];
+        guestList.forEach(g => ws_data.push([g.text, g.user, g.date]));
+        const ws = XLSX.utils.aoa_to_sheet(ws_data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Гости");
+        XLSX.writeFile(wb, `olma-guests.xlsx`);
+    }
+
+    function doCopyResults(){
+        const out=document.getElementById('results');
+        if(!out.textContent.trim()){ showToast("Нет данных для копирования", true); return; }
+        const text=Array.from(out.children).map(n=>n.textContent).join("\n");
+        navigator.clipboard?.writeText(text).then(()=>toastCopied()).catch(()=>legacyCopy(text));
+    }
+    function legacyCopy(t){
+        const ta=document.createElement("textarea"); ta.value=t; document.body.appendChild(ta); ta.select();
+        try{ document.execCommand("copy"); }catch{} document.body.removeChild(ta); toastCopied();
+    }
+    function toastCopied(){ const msg=document.getElementById("emptyMsg"); const p=msg.textContent; msg.textContent="✔ Скопировано"; setTimeout(()=>msg.textContent=p,1200); }
+
+    function populateUserFilter() {
+        const userSelect = document.getElementById("userSelect");
+        const filterUserSelect = document.getElementById("filterUser");
+        filterUserSelect.innerHTML = '<option value="all">Все пользователи</option>';
+        for (let i = 1; i < userSelect.options.length; i++) {
+            const option = userSelect.options[i];
+            filterUserSelect.add(new Option(option.text, option.value));
+        }
+    }
+
+    function checkTrainingReminder() {
+        if (sessionStorage.getItem('trainingReminderShown')) return;
+        const now = new Date();
+        const isFriday = now.getDay() === 5;
+        const isAfter5PM = now.getHours() >= 17;
+        if (isFriday && isAfter5PM && trainingList.length > 0) {
+            const remaining = trainingList.slice(0, 5).join('\n');
+            const message = `ВНИМАНИЕ!\n\nВ списке на тренинг остались необработанные сотрудники:\n\n${remaining}\n\n${trainingList.length > 5 ? `...и еще ${trainingList.length - 5}.` : ''}`;
+            alert(message);
+            sessionStorage.setItem('trainingReminderShown', 'true');
+        }
+    }
     
     document.addEventListener("DOMContentLoaded", populateUserFilter);
 
@@ -669,24 +883,85 @@
             showToast("Пожалуйста, выберите ваше ФИО", true);
         }
     });
+
+    document.getElementById("btnCopy").addEventListener("click", doCopyResults);
+    document.getElementById("btnSearch").addEventListener("click", doSearch);
+    document.getElementById("btnExport").addEventListener("click", exportSearch);
+    document.getElementById("btnImport").addEventListener("click", ()=>document.getElementById("fileInput").click());
+    document.getElementById("fileInput").addEventListener("change", e => { const f=e.target.files[0]; if(f) doImportFromExcel(f); e.target.value=""; });
+    document.getElementById("btnJournal").addEventListener("click", () => document.getElementById("filterOverlay").style.display = "flex");
+    document.getElementById("btnCancelFilter").addEventListener("click", () => document.getElementById("filterOverlay").style.display = "none");
+    document.getElementById("btnApplyFilter").addEventListener("click", async () => {
+        const selectedUser = document.getElementById('filterUser').value;
+        let journalData = [];
+        if (selectedUser === 'all') {
+            const journalsRef = firestore.collection("journals");
+            const snapshot = await journalsRef.get();
+            snapshot.forEach(doc => { journalData = journalData.concat(doc.data().entries || []); });
+        } else {
+            journalData = await loadJournal(selectedUser);
+        }
+        displayedJournal = journalData;
+        renderJournal(journalData);
+        document.getElementById("filterOverlay").style.display = "none";
+        document.getElementById("journalOverlay").style.display = "flex";
+    });
+    document.getElementById("closeJournal").addEventListener("click", ()=>document.getElementById("journalOverlay").style.display="none");
+    document.getElementById("btnExportJournal").addEventListener("click", exportJournal);
+    document.getElementById('input').addEventListener('keydown', function(event) { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); document.getElementById('btnSearch').click(); }});
+    document.getElementById('passwordInput').addEventListener('keydown', function(event) { if (event.key === 'Enter') { document.getElementById('btnConfirmClear').click(); }});
     
-    // ... All other event listeners ...
+    document.getElementById("btnClearJournal").addEventListener("click", () => {
+        requestPassword(() => {
+            const userToClear = displayedJournal.length > 0 ? displayedJournal[0].user : currentUser;
+            showConfirm(`Вы уверены, что хотите очистить ВЕСЬ журнал для пользователя ${userToClear}?`, async () => {
+                await saveJournal(userToClear, []);
+                if(userToClear === currentUser) journal = [];
+                displayedJournal = [];
+                renderJournal([]);
+                showToast("Журнал для " + userToClear + " очищен.");
+            });
+        });
+    });
+
+    document.getElementById('btnClearGuests').addEventListener('click', () => {
+        requestPassword(() => {
+            showConfirm('Вы уверены, что хотите полностью очистить журнал гостей?', async () => {
+                await saveGuestList([]);
+                await loadGuestList();
+                renderGuestList();
+                showToast("Журнал гостей очищен.");
+            });
+        });
+    });
     
     document.getElementById('btnTraining').addEventListener('click', () => {
         renderTrainingList();
         document.getElementById('trainingOverlay').style.display = 'flex';
     });
+    document.getElementById('closeTraining').addEventListener('click', () => document.getElementById('trainingOverlay').style.display = 'none');
+    
     document.getElementById('btnEditTrainingList').addEventListener('click', () => {
         document.getElementById('trainingListInput').value = trainingList.join('\n');
         document.getElementById('uploadTrainingOverlay').style.display = 'flex';
     });
+    document.getElementById('btnCancelUpload').addEventListener('click', () => {
+        document.getElementById('uploadTrainingOverlay').style.display = 'none';
+    });
     document.getElementById('btnSaveTrainingList').addEventListener('click', async () => {
-        const text = document.getElementById('trainingListInput').value.trim();
+        const text = document.getElementById('trainingListInput').value;
         const newList = text.split('\n').map(line => line.trim()).filter(Boolean);
         await saveTrainingList(newList, true);
         renderTrainingList();
         document.getElementById('uploadTrainingOverlay').style.display = 'none';
     });
+    
+    document.getElementById('btnGuests').addEventListener('click', () => {
+        renderGuestList();
+        document.getElementById('guestOverlay').style.display = 'flex';
+    });
+    document.getElementById('closeGuests').addEventListener('click', () => document.getElementById('guestOverlay').style.display = 'none');
+    document.getElementById('btnExportGuests').addEventListener('click', exportGuests);
 </script>
 </body>
 </html>
