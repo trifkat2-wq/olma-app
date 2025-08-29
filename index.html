@@ -210,25 +210,100 @@
     </div>
     
     <div id="journalOverlay" class="overlay" style="display: none;">
+        <div class="journal-window">
+            <div class="journal-header">
+                <h2 id="journalTitle">Журнал поиска</h2>
+                <button class="journal-close" id="closeJournal">×</button>
+            </div>
+            <div class="journal-body" id="journalBody"></div>
+            <div class="journal-footer">
+                <button class="btn-clear-journal" id="btnClearJournal">Очистить журнал</button>
+                <button class="btn-export-journal" id="btnExportJournal">Экспорт журнала</button>
+            </div>
         </div>
+    </div>
     
     <div id="filterOverlay" class="overlay" style="display: none;">
+        <div class="card modal-window" style="width: min(400px, 90vw);">
+            <h2>Фильтр журнала</h2>
+            <div class="form-group">
+                <label for="filterUser">Пользователь</label>
+                <select id="filterUser"></select>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn" id="btnCancelFilter" style="background-color: #6b7280;">Отмена</button>
+                <button class="btn btn-green" id="btnApplyFilter">Показать</button>
+            </div>
         </div>
+    </div>
 
     <div id="passwordOverlay" class="password-overlay overlay" style="display: none;">
+        <div class="card modal-window" style="width: min(400px, 90vw);">
+            <h2>Подтверждение</h2>
+            <p>Для этого действия введите пароль администратора.</p>
+            <div class="form-group">
+                <label for="passwordInput">Пароль</label>
+                <input type="password" id="passwordInput">
+            </div>
+            <div class="modal-buttons">
+                <button class="btn" id="btnCancelClear" style="background-color: #6b7280;">Отмена</button>
+                <button class="btn btn-red" id="btnConfirmClear">Подтвердить</button>
+            </div>
         </div>
+    </div>
 
     <div id="confirmOverlay" class="confirm-overlay overlay" style="display: none;">
+         <div class="card modal-window" style="width: min(400px, 90vw);">
+            <h2 id="confirmTitle">Подтвердите действие</h2>
+            <p id="confirmMessage">Вы уверены?</p>
+            <div class="modal-buttons">
+                <button class="btn" id="btnCancelAction" style="background-color: #6b7280;">Отмена</button>
+                <button class="btn btn-red" id="btnConfirmAction">Да, уверен</button>
+            </div>
         </div>
+    </div>
 
     <div id="trainingOverlay" class="training-overlay overlay" style="display: none;">
+        <div class="journal-window" style="width: min(600px, 90vw); height: 70vh;">
+            <div class="journal-header">
+                <h2>Список на тренинг</h2>
+                <button class="journal-close" id="closeTraining">×</button>
+            </div>
+            <div class="journal-body">
+                <h3 id="trainingStatus" style="text-align: center; margin-bottom: 15px;">Загрузка...</h3>
+                <ol id="trainingListContainer"></ol>
+            </div>
+            <div class="journal-footer">
+                <button class="btn-export-journal" id="btnEditTrainingList">Редактировать список</button>
+            </div>
         </div>
+    </div>
 
     <div id="guestOverlay" class="guest-overlay overlay" style="display: none;">
+        <div class="journal-window" style="width: min(700px, 90vw); height: 70vh;">
+            <div class="journal-header">
+                <h2>Журнал Гостей</h2>
+                <button class="journal-close" id="closeGuests">×</button>
+            </div>
+            <div class="journal-body" id="guestListContainer"></div>
+            <div class="journal-footer">
+                <button class="btn-clear-journal" id="btnClearGuests">Очистить журнал гостей</button>
+                <button class="btn-export-journal" id="btnExportGuests">Экспорт в Excel</button>
+            </div>
         </div>
+    </div>
 
     <div id="uploadTrainingOverlay" class="upload-training-overlay overlay" style="display: none;">
+        <div class="card modal-window" style="width: min(500px, 90vw);">
+            <h2>Редактирование списка</h2>
+            <p>Добавьте, удалите или исправьте ФИО. Каждый сотрудник с новой строки.</p>
+            <textarea id="trainingListInput" style="height: 200px; font-size: 13px;"></textarea>
+            <div class="modal-buttons">
+                <button class="btn" id="btnCancelUpload" style="background-color: #6b7280;">Отмена</button>
+                <button class="btn btn-green" id="btnSaveTrainingList">Сохранить изменения</button>
+            </div>
         </div>
+    </div>
     
     <div id="shiftOverlay" class="shift-overlay overlay" style="display: none;">
         <div class="card modal-window" style="width: min(400px, 90vw);">
@@ -247,6 +322,9 @@
     </div>
 
 <script>
+// ИСПРАВЛЕНИЕ: Весь код обернут в DOMContentLoaded, чтобы избежать ошибок синхронизации
+document.addEventListener("DOMContentLoaded", function() {
+
     const firebaseConfig = {
       apiKey: "AIzaSyDHrpashKVWzfqRWwp2fmrhfkvVNYEcMFI",
       authDomain: "olma-market-db.firebaseapp.com",
@@ -275,80 +353,207 @@
     }
 
     function showConfirm(message, onConfirm) {
-        // ... JavaScript без изменений ...
+        const confirmOverlay = document.getElementById('confirmOverlay');
+        document.getElementById('confirmMessage').textContent = message;
+        confirmOverlay.style.display = 'flex';
+        const btnConfirm = document.getElementById('btnConfirmAction');
+        const btnCancel = document.getElementById('btnCancelAction');
+        const confirmHandler = () => { onConfirm(); cleanup(); };
+        const cancelHandler = () => { cleanup(); };
+        const cleanup = () => {
+            confirmOverlay.style.display = 'none';
+            btnConfirm.removeEventListener('click', confirmHandler);
+            btnCancel.removeEventListener('click', cancelHandler);
+        };
+        btnConfirm.addEventListener('click', confirmHandler, { once: true });
+        btnCancel.addEventListener('click', cancelHandler, { once: true });
     }
 
     let passwordSuccessCallback = null;
     function requestPassword(onSuccess) {
-        // ... JavaScript без изменений ...
+        passwordSuccessCallback = onSuccess;
+        document.getElementById('passwordInput').value = '';
+        document.getElementById('passwordOverlay').style.display = 'flex';
     }
     
     document.getElementById('btnConfirmClear').addEventListener('click', () => {
-        // ... JavaScript без изменений ...
+        const passwordInput = document.getElementById('passwordInput');
+        if (passwordInput.value === 'Trener') {
+            if (passwordSuccessCallback) passwordSuccessCallback();
+        } else {
+            showToast("Неверный пароль!", true);
+        }
+        passwordInput.value = '';
+        document.getElementById('passwordOverlay').style.display = 'none';
+        passwordSuccessCallback = null;
     });
      document.getElementById('btnCancelClear').addEventListener('click', () => {
-        // ... JavaScript без изменений ...
+        document.getElementById('passwordInput').value = '';
+        document.getElementById('passwordOverlay').style.display = 'none';
+        passwordSuccessCallback = null;
     });
 
     async function loadDB() {
-        // ... JavaScript без изменений ...
+        dbStatusEl.textContent = 'Загрузка базы данных...';
+        importBtn.disabled = true;
+        try {
+            const doc = await firestore.collection("bases").doc("main").get();
+            if (doc.exists && Object.keys(doc.data()).length > 0) {
+                DB = doc.data();
+                dbStatusEl.textContent = `База загружена: ${Object.keys(DB).length} менеджеров`;
+            } else {
+                DB = {};
+                dbStatusEl.textContent = 'База не найдена. Импортируйте файл Excel.';
+            }
+        } catch (error) {
+            console.error("Ошибка загрузки базы: ", error);
+            dbStatusEl.textContent = 'Ошибка загрузки базы.';
+        } finally {
+            importBtn.disabled = false;
+        }
     }
 
     async function saveDB(newDB) {
-        // ... JavaScript без изменений ...
+        dbStatusEl.textContent = 'Сохранение базы на сервере...';
+        importBtn.disabled = true;
+        try {
+            await firestore.collection("bases").doc("main").set(newDB);
+            showToast("База успешно сохранена!");
+            setTimeout(() => window.location.reload(), 1500);
+        } catch (error) {
+            console.error("Ошибка сохранения базы: ", error);
+            showToast("Не удалось сохранить базу данных.", true);
+            dbStatusEl.textContent = 'Ошибка сохранения.';
+            importBtn.disabled = false;
+        }
     }
 
     async function loadJournal(user) {
-        // ... JavaScript без изменений ...
+        if (!user) return [];
+        try {
+            const doc = await firestore.collection("journals").doc(user).get();
+            return doc.exists ? (doc.data().entries || []) : [];
+        } catch (error) {
+            console.error("Ошибка загрузки журнала:", error);
+            return [];
+        }
     }
 
     async function saveJournal(user, journalData) {
-        // ... JavaScript без изменений ...
+        if (!user) return;
+        try {
+            await firestore.collection("journals").doc(user).set({ entries: journalData });
+        } catch (error) {
+            console.error("Ошибка сохранения журнала:", error);
+        }
     }
 
     async function loadTrainingList() {
-        // ... JavaScript без изменений ...
+        try {
+            const doc = await firestore.collection("app_data").doc("training").get();
+            if (doc.exists) {
+                trainingList = doc.data().fio_list || [];
+                initialTrainingListSize = doc.data().initial_size || trainingList.length;
+            } else {
+                trainingList = [];
+                initialTrainingListSize = 0;
+            }
+        } catch (error) {
+            console.error("Ошибка загрузки списка на тренинг:", error);
+            trainingList = [];
+            initialTrainingListSize = 0;
+        }
     }
 
     async function saveTrainingList(newList, isNewUpload = false) {
-        // ... JavaScript без изменений ...
+        try {
+            const dataToSave = { fio_list: newList };
+            if (isNewUpload) {
+                dataToSave.initial_size = newList.length;
+            } else {
+                dataToSave.initial_size = initialTrainingListSize;
+            }
+            await firestore.collection("app_data").doc("training").set(dataToSave, { merge: true });
+            showToast("Список на тренинг обновлен!");
+            await loadTrainingList();
+        } catch (error) {
+            console.error("Ошибка сохранения списка на тренинг:", error);
+            showToast("Ошибка сохранения списка.", true);
+        }
     }
 
     async function loadGuestList() {
-        // ... JavaScript без изменений ...
+        try {
+            const doc = await firestore.collection("app_data").doc("guests").get();
+            guestList = doc.exists ? (doc.data().entries || []) : [];
+        } catch (error) {
+            console.error("Ошибка загрузки журнала гостей:", error);
+            guestList = [];
+        }
     }
 
     async function saveGuestList(updatedGuestList) {
-        // ... JavaScript без изменений ...
+        try {
+            await firestore.collection("app_data").doc("guests").set({ entries: updatedGuestList });
+        } catch (error) {
+            console.error("Ошибка сохранения журнала гостей:", error);
+        }
     }
     
     function transliterate(text) {
-        // ... JavaScript без изменений ...
+        text = text.toLowerCase();
+        const a = {"ё":"yo","й":"i","ц":"ts","у":"u","к":"k","е":"e","н":"n","г":"g","ш":"sh","щ":"sch","з":"z","х":"h","ъ":"'","ф":"f","ы":"i","в":"v","а":"a","п":"p","р":"r","о":"o","л":"l","д":"d","ж":"zh","э":"e","я":"ya","ч":"ch","с":"s","м":"m","и":"i","т":"t","ь":"'","б":"b","ю":"yu","Ё":"YO","Й":"I","Ц":"TS","У":"U","К":"K","Е":"E","Н":"N","Г":"G","Ш":"SH","Щ":"SCH","З":"Z","Х":"H","Ъ":"'","Ф":"F","Ы":"I","В":"V","А":"a","П":"P","Р":"R","О":"O","Л":"L","Д":"D","Ж":"ZH","Э":"E","Я":"Ya","Ч":"CH","С":"S","М":"M","И":"I","Т":"T","Ь":"'","Б":"B","Ю":"YU"};
+        return text.split('').map(char => a[char] || char).join("");
     }
 
     function similarity(s1, s2) {
-        // ... JavaScript без изменений ...
+        let longer = s1, shorter = s2;
+        if (s1.length < s2.length) { longer = s2; shorter = s1; }
+        const longerLength = longer.length;
+        if (longerLength === 0) return 1.0;
+        return (longerLength - editDistance(longer, shorter)) / parseFloat(longerLength);
     }
 
     function editDistance(s1, s2) {
-        // ... JavaScript без изменений ...
+        const costs = [];
+        for (let i = 0; i <= s1.length; i++) {
+            let lastValue = i;
+            for (let j = 0; j <= s2.length; j++) {
+                if (i === 0) costs[j] = j;
+                else if (j > 0) {
+                    let newValue = costs[j - 1];
+                    if (s1.charAt(i - 1) !== s2.charAt(j - 1)) newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
+                    costs[j - 1] = lastValue;
+                    lastValue = newValue;
+                }
+            }
+            if (i > 0) costs[s2.length] = lastValue;
+        }
+        return costs[s2.length];
     }
     
     const CODE_RE = /([A-ZА-Я])\s*-?\s*0*(\d+)/ig;
     function normalizeCode(letter, numberStr) {
-        // ... JavaScript без изменений ...
+        const letterMap = { 'М': 'M', 'А': 'A', 'К': 'K', 'С': 'C', 'Р': 'R' };
+        return `${letterMap[letter.toUpperCase()] || letter.toUpperCase()}-${parseInt(numberStr, 10)}`;
     }
 
     function buildCodeMap(db){
-        // ... JavaScript без изменений ...
+        const map = {};
+        for (const [manager, codes] of Object.entries(db)) {
+            if (Array.isArray(codes)) {
+                for (const code of codes) {
+                    CODE_RE.lastIndex = 0;
+                    const match = CODE_RE.exec(String(code));
+                    if (match) map[normalizeCode(match[1], match[2])] = manager;
+                }
+            }
+        }
+        return map;
     }
 
     let lastExport={};
 
-    // ИЗМЕНЕНИЕ 2: Глобальная переменная для хранения выбранной смены
-    let selectedShift = null;
-
-    // ИЗМЕНЕНИЕ 2: Обновленная функция doSearch, которая принимает смену как аргумент
     async function doSearch(shift) {
         const ta = document.getElementById('input');
         const raw = ta.value.trim();
@@ -426,7 +631,6 @@
                 const ol = document.createElement('ol');
                 arr.forEach(v => {
                     const li = document.createElement('li'); li.textContent = v; ol.appendChild(li);
-                    // Используем переданную смену
                     newJournalEntries.push({ id: Date.now() + Math.random(), user: currentUser, manager: m, employee: v, date: now, shift: shift, searchId: searchId });
                 });
                 out.appendChild(ol);
@@ -461,60 +665,217 @@
     }
     
     function doImportFromExcel(file){
-        // ... JavaScript без изменений ...
+        const r = new FileReader();
+        r.onload = e => {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const wb = XLSX.read(data, {type:'array'});
+                const ws = wb.Sheets[wb.SheetNames[0]];
+                const rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:false});
+                
+                const newDB = {};
+                if (rows.length < 1) { showToast("Файл Excel пуст.", true); return; }
+                const firstRowCell = String(rows[0][0] || '').toLowerCase();
+                const startingRow = (firstRowCell.includes('менеджер') || firstRowCell.includes('manager')) ? 1 : 0;
+                for (let i = startingRow; i < rows.length; i++) {
+                    const row = rows[i];
+                    const manager = String(row[0] || '').trim();
+                    const codesString = String(row[1] || '').trim();
+                    if (!manager || !codesString) continue;
+                    const codesArray = codesString.split(',').map(code => code.trim()).filter(Boolean);
+                    if (codesArray.length > 0) newDB[manager] = codesArray;
+                }
+                if (Object.keys(newDB).length === 0) { showToast("Не удалось распознать данные в файле.", true); return; }
+                showConfirm(`Найдено ${Object.keys(newDB).length} менеджеров. Обновить общую базу?`, () => saveDB(newDB));
+            } catch (error) {
+                console.error("Ошибка при чтении файла Excel:", error);
+                showToast("Ошибка при чтении файла Excel.", true);
+            }
+        };
+        r.readAsArrayBuffer(file);
     }
     
     async function addToJournal(newEntries){
-        // ... JavaScript без изменений ...
+        journal.push(...newEntries);
+        await saveJournal(currentUser, journal);
     }
     
     function renderJournal(journalData) {
-        // ... JavaScript без изменений ...
+        const body = document.getElementById("journalBody");
+        body.innerHTML = "";
+        if (journalData.length === 0) {
+            body.innerHTML = "<p class='muted' style='text-align:center;'>Записей в журнале нет</p>";
+            return;
+        }
+        journalData.sort((a,b) => new Date(b.id) - new Date(a.id));
+        const groupedByDate = {};
+        journalData.forEach(entry => {
+            const dateKey = entry.date.split(',')[0]; 
+            if (!groupedByDate[dateKey]) groupedByDate[dateKey] = [];
+            groupedByDate[dateKey].push(entry);
+        });
+        const sortedDates = Object.keys(groupedByDate).sort((a, b) => {
+             const dateA = a.split('.').reverse().join('-');
+             const dateB = b.split('.').reverse().join('-');
+             return new Date(dateB) - new Date(dateA);
+        });
+        sortedDates.forEach((date) => {
+            const entriesForDate = groupedByDate[date];
+            const details = document.createElement("details");
+            details.className = "date-group";
+            details.open = true;
+            const summary = document.createElement("summary");
+            summary.textContent = date;
+            details.appendChild(summary);
+            const contentDiv = document.createElement("div");
+            contentDiv.className = "date-content";
+            const table = document.createElement("table");
+            table.className = "journal-table";
+            table.innerHTML = `<thead><tr><th>Кто искал</th><th>Смена</th><th>Менеджер</th><th>Сотрудник / Магазин</th><th>Время</th></tr></thead>`;
+            const tbody = document.createElement("tbody");
+            entriesForDate.forEach(entry => {
+                const tr = document.createElement("tr");
+                const time = entry.date.split(',')[1] || '';
+                const shiftSelect = `<select data-entry-id="${entry.id}" onchange="handleShiftChange(event)">
+                        <option value="1-Смена" ${entry.shift === '1-Смена' ? 'selected' : ''}>1-Смена</option>
+                        <option value="2-Смена" ${entry.shift === '2-Смена' ? 'selected' : ''}>2-Смена</option>
+                        <option value="Открытая смена" ${entry.shift === 'Открытая смена' ? 'selected' : ''}>Открытая</option>
+                    </select>`;
+                tr.innerHTML = `<td>${entry.user}</td><td>${shiftSelect}</td><td>${entry.manager}</td><td>${entry.employee}</td><td>${time}</td>`;
+                tbody.appendChild(tr);
+            });
+            table.appendChild(tbody);
+            contentDiv.appendChild(table);
+            details.appendChild(contentDiv);
+            body.appendChild(details);
+        });
     }
 
     function renderTrainingList() {
-        // ... JavaScript без изменений ...
+        const container = document.getElementById('trainingListContainer');
+        const statusEl = document.getElementById('trainingStatus');
+        container.innerHTML = '';
+        if (trainingList.length === 0) {
+            statusEl.textContent = 'Список пуст. Все сотрудники обработаны! 🎉';
+            return;
+        }
+        statusEl.textContent = `Осталось обработать: ${trainingList.length} из ${initialTrainingListSize}`;
+        trainingList.forEach(item => {
+            const li = document.createElement('li');
+            li.textContent = item;
+            container.appendChild(li);
+        });
     }
 
     function renderGuestList() {
-        // ... JavaScript без изменений ...
+        const container = document.getElementById('guestListContainer');
+        container.innerHTML = "";
+        if (guestList.length === 0) {
+            container.innerHTML = "<p class='muted' style='text-align:center;'>Журнал гостей пуст</p>";
+            return;
+        }
+        const sortedGuests = [...guestList].sort((a,b) => new Date(b.id) - new Date(a.id));
+        const table = document.createElement("table");
+        table.className = "journal-table";
+        table.innerHTML = `<thead><tr><th>Запись</th><th>Кто добавил</th><th>Дата и время</th></tr></thead>`;
+        const tbody = document.createElement("tbody");
+        sortedGuests.forEach(guest => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `<td>${guest.text}</td><td>${guest.user}</td><td>${guest.date}</td>`;
+            tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        container.appendChild(table);
     }
 
     async function handleShiftChange(event) {
-        // ... JavaScript без изменений ...
+        const entryId = parseFloat(event.target.dataset.entryId);
+        const newShift = event.target.value;
+        const userOfEntry = displayedJournal.find(e => e.id === entryId)?.user;
+        if (!userOfEntry) return;
+        const userJournal = await loadJournal(userOfEntry);
+        const entryToUpdate = userJournal.find(e => e.id === entryId);
+        if (entryToUpdate) {
+            entryToUpdate.shift = newShift;
+            await saveJournal(userOfEntry, userJournal);
+            const displayedEntry = displayedJournal.find(e => e.id === entryId);
+            if(displayedEntry) displayedEntry.shift = newShift;
+        }
     }
 
     function exportSearch(){
-        // ... JavaScript без изменений ...
+        if(Object.keys(lastExport).length===0){ showToast("Нет данных для экспорта", true); return; }
+        const ws_data=[];
+        for(const [m,arr] of Object.entries(lastExport)){
+            ws_data.push([`Менеджер ${m}:`]);
+            arr.forEach((v,i)=>ws_data.push([`${i+1}. ${v}`]));
+            ws_data.push([]);
+        }
+        const ws=XLSX.utils.aoa_to_sheet(ws_data);
+        const wb=XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb,ws,"Результаты");
+        XLSX.writeFile(wb,"olma-search.xlsx");
     }
 
     function exportJournal(){
-        // ... JavaScript без изменений ...
+        if(displayedJournal.length === 0){ showToast("Нет данных для экспорта.", true); return; }
+        const ws_data=[["Кто искал","Смена","Менеджер","Сотрудник / Магазин", "Дата", "Время"]];
+        displayedJournal.forEach(entry => {
+            const [date, time] = entry.date.split(',');
+            ws_data.push([entry.user, entry.shift, entry.manager, entry.employee, date, time]);
+        });
+        const ws=XLSX.utils.aoa_to_sheet(ws_data);
+        const wb=XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb,ws,"Журнал");
+        XLSX.writeFile(wb,`olma-journal-export.xlsx`);
     }
 
     function exportGuests() {
-        // ... JavaScript без изменений ...
+        if (guestList.length === 0) { showToast("Журнал гостей пуст.", true); return; }
+        const ws_data = [["Запись", "Кто добавил", "Дата и время"]];
+        guestList.forEach(g => ws_data.push([g.text, g.user, g.date]));
+        const ws = XLSX.utils.aoa_to_sheet(ws_data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Гости");
+        XLSX.writeFile(wb, `olma-guests.xlsx`);
     }
 
     function doCopyResults(){
-        // ... JavaScript без изменений ...
+        const out=document.getElementById('results');
+        if(!out.textContent.trim()){ showToast("Нет данных для копирования", true); return; }
+        const text=Array.from(out.children).map(n=>n.textContent).join("\n");
+        navigator.clipboard?.writeText(text).then(()=>toastCopied()).catch(()=>legacyCopy(text));
     }
     function legacyCopy(t){
-        // ... JavaScript без изменений ...
+        const ta=document.createElement("textarea"); ta.value=t; document.body.appendChild(ta); ta.select();
+        try{ document.execCommand("copy"); }catch{} document.body.removeChild(ta); toastCopied();
     }
-    function toastCopied(){
-        // ... JavaScript без изменений ...
-    }
+    function toastCopied(){ const msg=document.getElementById("emptyMsg"); const p=msg.textContent; msg.textContent="✔ Скопировано"; setTimeout(()=>msg.textContent=p,1200); }
 
     function populateUserFilter() {
-        // ... JavaScript без изменений ...
+        const userSelect = document.getElementById("userSelect");
+        const filterUserSelect = document.getElementById("filterUser");
+        filterUserSelect.innerHTML = '<option value="all">Все пользователи</option>';
+        for (let i = 1; i < userSelect.options.length; i++) {
+            const option = userSelect.options[i];
+            filterUserSelect.add(new Option(option.text, option.value));
+        }
     }
 
     function checkTrainingReminder() {
-        // ... JavaScript без изменений ...
+        if (sessionStorage.getItem('trainingReminderShown')) return;
+        const now = new Date();
+        const isFriday = now.getDay() === 5;
+        const isAfter5PM = now.getHours() >= 17;
+        if (isFriday && isAfter5PM && trainingList.length > 0) {
+            const remaining = trainingList.slice(0, 5).join('\n');
+            const message = `ВНИМАНИЕ!\n\nВ списке на тренинг остались необработанные сотрудники:\n\n${remaining}\n\n${trainingList.length > 5 ? `...и еще ${trainingList.length - 5}.` : ''}`;
+            alert(message);
+            sessionStorage.setItem('trainingReminderShown', 'true');
+        }
     }
     
-    document.addEventListener("DOMContentLoaded", populateUserFilter);
+    populateUserFilter();
 
     document.getElementById("btnStart").addEventListener("click", async () => {
         const userSelect = document.getElementById("userSelect");
@@ -533,7 +894,6 @@
         }
     });
 
-    // ИЗМЕНЕНИЕ 2: Обработчик кнопки "Показать менеджера" теперь открывает окно выбора смены
     document.getElementById("btnSearch").addEventListener("click", () => {
         const raw = document.getElementById('input').value.trim();
         if (!raw) {
@@ -550,7 +910,19 @@
     document.getElementById("btnJournal").addEventListener("click", () => document.getElementById("filterOverlay").style.display = "flex");
     document.getElementById("btnCancelFilter").addEventListener("click", () => document.getElementById("filterOverlay").style.display = "none");
     document.getElementById("btnApplyFilter").addEventListener("click", async () => {
-        // ... JavaScript без изменений ...
+        const selectedUser = document.getElementById('filterUser').value;
+        let journalData = [];
+        if (selectedUser === 'all') {
+            const journalsRef = firestore.collection("journals");
+            const snapshot = await journalsRef.get();
+            snapshot.forEach(doc => { journalData = journalData.concat(doc.data().entries || []); });
+        } else {
+            journalData = await loadJournal(selectedUser);
+        }
+        displayedJournal = journalData;
+        renderJournal(journalData);
+        document.getElementById("filterOverlay").style.display = "none";
+        document.getElementById("journalOverlay").style.display = "flex";
     });
     document.getElementById("closeJournal").addEventListener("click", ()=>document.getElementById("journalOverlay").style.display="none");
     document.getElementById("btnExportJournal").addEventListener("click", exportJournal);
@@ -594,11 +966,8 @@
     document.getElementById('btnCancelUpload').addEventListener('click', () => {
         document.getElementById('uploadTrainingOverlay').style.display = 'none';
     });
-
-    // ИЗМЕНЕНИЕ 1: Добавлена очистка от номеров при сохранении списка
     document.getElementById('btnSaveTrainingList').addEventListener('click', async () => {
         const text = document.getElementById('trainingListInput').value;
-        // Удаляем цифры, точки и пробелы в начале каждой строки
         const newList = text.split('\n')
             .map(line => line.trim().replace(/^[\d.\s]+/, '').trim())
             .filter(Boolean);
@@ -614,7 +983,6 @@
     document.getElementById('closeGuests').addEventListener('click', () => document.getElementById('guestOverlay').style.display = 'none');
     document.getElementById('btnExportGuests').addEventListener('click', exportGuests);
     
-    // ИЗМЕНЕНИЕ 2: Новые обработчики для кнопок выбора смены
     document.getElementById('btnSelectShift1').addEventListener('click', () => {
         document.getElementById('shiftOverlay').style.display = 'none';
         doSearch('1-Смена');
@@ -626,6 +994,7 @@
     document.getElementById('btnCancelShift').addEventListener('click', () => {
         document.getElementById('shiftOverlay').style.display = 'none';
     });
+});
 </script>
 </body>
 </html>
