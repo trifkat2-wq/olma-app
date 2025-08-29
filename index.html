@@ -6,7 +6,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     
-    <!-- ДОБАВЛЕНЫ СКРИПТЫ FIREBASE -->
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-firestore-compat.js"></script>
 
@@ -62,13 +61,13 @@
         .btn-yellow{ background:var(--olma-yellow); color:#212121; }
         .results{ text-align:left; margin-top:14px; }
         .mgr{ font-weight:700; color:var(--olma-black); margin:14px 0 6px }
-        ol{ margin:6px 0 0 18px; }
+        ol{ margin:6px 0 0 18px; padding-left: 18px; }
         .muted{ color:#6b7280; font-style:italic; margin-top:8px }
         .copy-wrap{ display:none; margin-top:12px; text-align:center; }
         .copy-btn{ width:28px; height:28px; border:none; background:transparent; cursor:pointer; opacity:.75; padding:0; margin:0 auto; }
         .copy-btn:hover{ opacity:1 } .copy-btn:active{ transform:scale(.98) }
         .copy-btn svg{ width:100%; height:100%; display:block; }
-        .upbar{ position:absolute; top:10px; right:10px; }
+        .upbar{ position:absolute; top:10px; right:10px; display: flex; gap: 10px; }
         .btn-journal{
             background:#fff; border:none; border-radius:8px; padding:6px 12px;
             font-weight:600; font-size:14px; cursor:pointer;
@@ -81,7 +80,7 @@
             display:flex; align-items:center; justify-content:center;
             z-index:1000;
         }
-        .journal-overlay, .filter-overlay, .password-overlay, .confirm-overlay { display:none; }
+        .journal-overlay, .filter-overlay, .password-overlay, .confirm-overlay, .training-overlay, .guest-overlay, .upload-training-overlay { display:none; }
         .journal-window{
             width:90vw; height:80vh;
             background:#fff; border-radius:14px;
@@ -117,7 +116,7 @@
         .modal-window .form-group{ text-align: left; margin-bottom: 12px; }
         .modal-window .form-group label{ font-weight: 600; font-size: 14px; margin-bottom: 4px; display: block; }
         .modal-window p { margin: 10px 0 20px; }
-        .modal-buttons { display: flex; gap: 10px; }
+        .modal-buttons { display: flex; gap: 10px; justify-content: flex-end; }
 
         .toast {
             position: fixed;
@@ -191,7 +190,11 @@
 
     <div id="mainApp" style="display:none;">
         <div class="card">
-            <div class="upbar"><button class="btn-journal" id="btnJournal">Журнал</button></div>
+            <div class="upbar">
+                <button class="btn-journal" id="btnGuests">Гости</button>
+                <button class="btn-journal" id="btnTraining">Тренинг</button>
+                <button class="btn-journal" id="btnJournal">Журнал</button>
+            </div>
             <img class="logo" src="logo_olma_hd_transparent.png" alt="Olma Market" onerror="this.style.display='none'">
             <h1>Поиск менеджера</h1>
             <textarea id="input" placeholder="Введите текст"></textarea>
@@ -262,6 +265,49 @@
         </div>
     </div>
 
+    <div id="trainingOverlay" class="training-overlay overlay">
+        <div class="journal-window" style="width: min(600px, 90vw); height: 70vh;">
+            <div class="journal-header">
+                <h2>Список на тренинг</h2>
+                <button class="journal-close" id="closeTraining">×</button>
+            </div>
+            <div class="journal-body">
+                <h3 id="trainingStatus" style="text-align: center; margin-bottom: 15px;">Загрузка...</h3>
+                <ol id="trainingListContainer"></ol>
+            </div>
+            <div class="journal-footer">
+                <button class="btn-clear-journal" id="btnClearTrainingList">Очистить список</button>
+                <button class="btn-export-journal" id="btnUploadTrainingList">Загрузить новый список</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="guestOverlay" class="guest-overlay overlay">
+        <div class="journal-window" style="width: min(700px, 90vw); height: 70vh;">
+            <div class="journal-header">
+                <h2>Журнал Гостей</h2>
+                <button class="journal-close" id="closeGuests">×</button>
+            </div>
+            <div class="journal-body" id="guestListContainer"></div>
+            <div class="journal-footer">
+                <button class="btn-clear-journal" id="btnClearGuests">Очистить журнал гостей</button>
+                <button class="btn-export-journal" id="btnExportGuests">Экспорт в Excel</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="uploadTrainingOverlay" class="upload-training-overlay overlay">
+        <div class="card modal-window" style="width: min(500px, 90vw);">
+            <h2>Загрузка списка на тренинг</h2>
+            <p>Вставьте сюда ФИО сотрудников. Каждый сотрудник с новой строки.</p>
+            <textarea id="trainingListInput" placeholder="Иванов Иван&#10;Петров Петр" style="height: 200px; font-size: 13px;"></textarea>
+            <div class="modal-buttons">
+                <button class="btn" id="btnCancelUpload" style="background-color: #6b7280;">Отмена</button>
+                <button class="btn btn-green" id="btnSaveTrainingList">Сохранить</button>
+            </div>
+        </div>
+    </div>
+
     <div id="toast" class="toast">
         <span id="toastMessage"></span>
     </div>
@@ -284,9 +330,12 @@
 
     /* === Хранилище === */
     let DB = {};
-    let currentUser = ""; 
+    let currentUser = "";  
     let journal = [];
     let displayedJournal = [];
+    let trainingList = []; // НОВАЯ ПЕРЕМЕННАЯ
+    let guestList = []; // НОВАЯ ПЕРЕМЕННАЯ
+    let initialTrainingListSize = 0; // НОВАЯ ПЕРЕМЕННАЯ
 
     const dbStatusEl = document.getElementById('dbStatus');
     const importBtn = document.getElementById('btnImport');
@@ -296,49 +345,41 @@
     function showToast(message, isError = false) {
         const toast = document.getElementById('toast');
         const toastMessage = document.getElementById('toastMessage');
-
         clearTimeout(toastTimeout);
-
         toastMessage.textContent = message;
-        toast.className = 'toast'; // Reset classes
+        toast.className = 'toast';
         if (isError) {
             toast.classList.add('error');
         }
         toast.classList.add('show');
-
         toastTimeout = setTimeout(() => {
             toast.classList.remove('show');
-        }, 3000); // Hide after 3 seconds
+        }, 3000);
     }
 
     function showConfirm(message, onConfirm) {
         const confirmOverlay = document.getElementById('confirmOverlay');
         document.getElementById('confirmMessage').textContent = message;
         confirmOverlay.style.display = 'flex';
-
         const btnConfirm = document.getElementById('btnConfirmAction');
         const btnCancel = document.getElementById('btnCancelAction');
-
         const confirmHandler = () => {
             onConfirm();
             cleanup();
         };
-
         const cancelHandler = () => {
             cleanup();
         };
-
         const cleanup = () => {
             confirmOverlay.style.display = 'none';
             btnConfirm.removeEventListener('click', confirmHandler);
             btnCancel.removeEventListener('click', cancelHandler);
         };
-
         btnConfirm.addEventListener('click', confirmHandler, { once: true });
         btnCancel.addEventListener('click', cancelHandler, { once: true });
     }
 
-
+    // --- ОБНОВЛЕННЫЕ ФУНКЦИИ РАБОТЫ С FIREBASE ---
     async function loadDB() {
         dbStatusEl.textContent = 'Загрузка базы данных...';
         importBtn.disabled = true;
@@ -394,7 +435,59 @@
             console.error("Ошибка сохранения журнала:", error);
         }
     }
-    
+
+    // ===== НОВЫЕ ФУНКЦИИ ДЛЯ "ТРЕНИНГА" И "ГОСТЕЙ" =====
+    async function loadTrainingList() {
+        try {
+            const doc = await firestore.collection("app_data").doc("training").get();
+            if (doc.exists) {
+                trainingList = doc.data().fio_list || [];
+                initialTrainingListSize = doc.data().initial_size || trainingList.length;
+            } else {
+                trainingList = [];
+                initialTrainingListSize = 0;
+            }
+        } catch (error) {
+            console.error("Ошибка загрузки списка на тренинг:", error);
+            trainingList = [];
+            initialTrainingListSize = 0;
+        }
+    }
+
+    async function saveTrainingList(newList, isNewUpload = false) {
+        try {
+            const dataToSave = { fio_list: newList };
+            if (isNewUpload) {
+                dataToSave.initial_size = newList.length;
+            }
+            await firestore.collection("app_data").doc("training").set(dataToSave, { merge: !isNewUpload });
+            showToast("Список на тренинг обновлен!");
+            await loadTrainingList();
+        } catch (error) {
+            console.error("Ошибка сохранения списка на тренинг:", error);
+            showToast("Ошибка сохранения списка.", true);
+        }
+    }
+
+    async function loadGuestList() {
+        try {
+            const doc = await firestore.collection("app_data").doc("guests").get();
+            guestList = doc.exists ? (doc.data().entries || []) : [];
+        } catch (error) {
+            console.error("Ошибка загрузки журнала гостей:", error);
+            guestList = [];
+        }
+    }
+
+    async function saveGuestList(updatedGuestList) {
+        try {
+            await firestore.collection("app_data").doc("guests").set({ entries: updatedGuestList });
+        } catch (error) {
+            console.error("Ошибка сохранения журнала гостей:", error);
+        }
+    }
+
+    // --- ИМПОРТ И ЖУРНАЛЫ (без серьезных изменений) ---
     function doImportFromExcel(file){
         const r = new FileReader();
         r.onload = e => {
@@ -405,38 +498,29 @@
                 const rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:false});
                 
                 const newDB = {};
-                
                 if (rows.length < 1) {
                     showToast("Файл Excel пуст.", true);
                     return;
                 }
-                
                 const firstRowCell = String(rows[0][0] || '').toLowerCase();
                 const startingRow = (firstRowCell.includes('менеджер') || firstRowCell.includes('manager')) ? 1 : 0;
-
                 for (let i = startingRow; i < rows.length; i++) {
                     const row = rows[i];
                     const manager = String(row[0] || '').trim();
                     const codesString = String(row[1] || '').trim();
-
                     if (!manager || !codesString) continue;
-
                     const codesArray = codesString.split(',').map(code => code.trim()).filter(Boolean);
-
                     if (codesArray.length > 0) {
                         newDB[manager] = codesArray;
                     }
                 }
-
                 if (Object.keys(newDB).length === 0) { 
                     showToast("Не удалось распознать данные в файле.", true);
                     return; 
                 }
-                
                 showConfirm(`Найдено ${Object.keys(newDB).length} менеджеров. Обновить общую базу для ВСЕХ пользователей?`, () => {
                     saveDB(newDB);
                 });
-
             } catch (error) {
                 console.error("Ошибка при чтении файла Excel:", error);
                 showToast("Ошибка при чтении файла Excel.", true);
@@ -450,56 +534,43 @@
         await saveJournal(currentUser, journal);
     }
     
+    // ===== НОВЫЕ ФУНКЦИИ ОТРИСОВКИ (RENDER) =====
     function renderJournal(journalData) {
         const body = document.getElementById("journalBody");
         body.innerHTML = "";
-
         if (journalData.length === 0) {
             body.innerHTML = "<p class='muted' style='text-align:center;'>Записей в журнале нет</p>";
             return;
         }
-        
-        journalData.sort((a,b) => {
-            const dateA = a.date.split(', ')[0].split('.').reverse().join('-') + 'T' + (a.date.split(', ')[1] || '00:00');
-            const dateB = b.date.split(', ')[0].split('.').reverse().join('-') + 'T' + (b.date.split(', ')[1] || '00:00');
-            return new Date(dateA) - new Date(dateB);
-        });
-
+        journalData.sort((a,b) => new Date(b.id) - new Date(a.id)); // Сортировка по ID (времени)
         const groupedByDate = {};
         journalData.forEach(entry => {
             const dateKey = entry.date.split(',')[0]; 
             if (!groupedByDate[dateKey]) groupedByDate[dateKey] = [];
             groupedByDate[dateKey].push(entry);
         });
-        
         const sortedDates = Object.keys(groupedByDate).sort((a, b) => {
              const dateA = a.split('.').reverse().join('-');
              const dateB = b.split('.').reverse().join('-');
-             return new Date(dateA) - new Date(dateB);
+             return new Date(dateB) - new Date(dateA); // Сначала новые даты
         });
-
         sortedDates.forEach((date) => {
             const entriesForDate = groupedByDate[date];
             const details = document.createElement("details");
             details.className = "date-group";
             details.open = true;
-
             const summary = document.createElement("summary");
             summary.textContent = date;
             details.appendChild(summary);
-
             const contentDiv = document.createElement("div");
             contentDiv.className = "date-content";
-
             const table = document.createElement("table");
             table.className = "journal-table";
             table.innerHTML = `<thead><tr><th>Кто искал</th><th>Смена</th><th>Менеджер</th><th>Сотрудник / Магазин</th><th>Время</th></tr></thead>`;
             const tbody = document.createElement("tbody");
-
             entriesForDate.forEach(entry => {
                 const tr = document.createElement("tr");
                 const time = entry.date.split(',')[1] || '';
-                
                 const shiftSelect = `
                     <select data-entry-id="${entry.id}" onchange="handleShiftChange(event)">
                         <option value="1-Смена" ${entry.shift === '1-Смена' ? 'selected' : ''}>1-Смена</option>
@@ -507,11 +578,9 @@
                         <option value="Открытая смена" ${entry.shift === 'Открытая смена' ? 'selected' : ''}>Открытая</option>
                     </select>
                 `;
-
                 tr.innerHTML = `<td>${entry.user}</td><td>${shiftSelect}</td><td>${entry.manager}</td><td>${entry.employee}</td><td>${time}</td>`;
                 tbody.appendChild(tr);
             });
-
             table.appendChild(tbody);
             contentDiv.appendChild(table);
             details.appendChild(contentDiv);
@@ -519,26 +588,58 @@
         });
     }
 
+    function renderTrainingList() {
+        const container = document.getElementById('trainingListContainer');
+        const statusEl = document.getElementById('trainingStatus');
+        container.innerHTML = '';
+        if (trainingList.length === 0) {
+            statusEl.textContent = 'Список пуст. Все сотрудники обработаны! 🎉';
+            return;
+        }
+        statusEl.textContent = `Осталось обработать: ${trainingList.length} из ${initialTrainingListSize}`;
+        trainingList.forEach(item => {
+            const li = document.createElement('li');
+            li.textContent = item;
+            container.appendChild(li);
+        });
+    }
+
+    function renderGuestList() {
+        const container = document.getElementById('guestListContainer');
+        container.innerHTML = "";
+        if (guestList.length === 0) {
+            container.innerHTML = "<p class='muted' style='text-align:center;'>Журнал гостей пуст</p>";
+            return;
+        }
+        const sortedGuests = [...guestList].sort((a,b) => new Date(b.id) - new Date(a.id));
+        const table = document.createElement("table");
+        table.className = "journal-table";
+        table.innerHTML = `<thead><tr><th>Запись</th><th>Кто добавил</th><th>Дата и время</th></tr></thead>`;
+        const tbody = document.createElement("tbody");
+        sortedGuests.forEach(guest => {
+            const tr = document.createElement("tr");
+            tr.innerHTML = `<td>${guest.text}</td><td>${guest.user}</td><td>${guest.date}</td>`;
+            tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        container.appendChild(table);
+    }
+
     async function handleShiftChange(event) {
         const entryId = parseFloat(event.target.dataset.entryId);
         const newShift = event.target.value;
-        const userOfEntry = displayedJournal.find(e => e.id === entryId)?.user;
-
-        if (!userOfEntry) return;
-
-        const userJournal = await loadJournal(userOfEntry);
-        const entryToUpdate = userJournal.find(e => e.id === entryId);
+        const entryToUpdateGlobally = journal.find(e => e.id === entryId);
         
-        if (entryToUpdate) {
-            entryToUpdate.shift = newShift;
-            await saveJournal(userOfEntry, userJournal);
+        if (entryToUpdateGlobally) {
+            entryToUpdateGlobally.shift = newShift;
+            await saveJournal(currentUser, journal);
+            
             const displayedEntry = displayedJournal.find(e => e.id === entryId);
             if(displayedEntry) displayedEntry.shift = newShift;
         }
     }
 
     const CODE_RE = /([A-ZА-Я])\s*-?\s*0*(\d+)/ig;
-
     function normalizeCode(letter, numberStr) {
         const letterMap = { 'М': 'M', 'А': 'A', 'К': 'K', 'С': 'C', 'Р': 'R' };
         const upperLetter = letter.toUpperCase();
@@ -567,86 +668,136 @@
     }
 
     let lastExport={};
-    async function doSearch(){
-        const ta=document.getElementById('input');
-        const raw=ta.value.trim();
-        const out=document.getElementById('results');
-        const empty=document.getElementById('emptyMsg');
-        const copyWrap=document.getElementById('copyWrap');
-        out.innerHTML=''; empty.textContent=''; copyWrap.style.display='none';
-        if(!raw){ empty.textContent='Введите данные'; return; }
+
+    // ===== ГЛАВНАЯ ФУНКЦИЯ ПОИСКА (ПОЛНОСТЬЮ ПЕРЕРАБОТАНА) =====
+    async function doSearch() {
+        const ta = document.getElementById('input');
+        const raw = ta.value.trim();
+        const out = document.getElementById('results');
+        const empty = document.getElementById('emptyMsg');
+        const copyWrap = document.getElementById('copyWrap');
+        out.innerHTML = ''; empty.textContent = ''; copyWrap.style.display = 'none';
+
+        if (!raw) { empty.textContent = 'Введите данные'; return; }
         if (Object.keys(DB).length === 0) {
             empty.textContent = 'База пуста. Импортируйте файл Excel.';
             return;
         }
-        
-        const codeMap = buildCodeMap(DB);
-        const lines=raw.split(/\n/).map(s=>s.trim()).filter(Boolean);
-        const grouped={};
 
-        for(const line of lines){
-            let match;
+        const lines = raw.split(/\n/).map(s => s.trim()).filter(Boolean);
+        const codeMap = buildCodeMap(DB);
+        const grouped = {};
+        const guests = [];
+        const processedLines = new Set();
+        const guestRegex = /\b(ТМ|РМ)\b/i;
+
+        // 1. Предварительная обработка: ищем гостей по ТМ/РМ и явные совпадения
+        for (const line of lines) {
+            if (guestRegex.test(line)) {
+                guests.push(line);
+                processedLines.add(line);
+                continue;
+            }
+            
+            let managerFound = false;
             CODE_RE.lastIndex = 0;
+            let match;
             while ((match = CODE_RE.exec(line)) !== null) {
                 const normalizedCode = normalizeCode(match[1], match[2]);
                 const manager = codeMap[normalizedCode];
                 if (manager) {
-                    if (!grouped[manager]) {
-                        grouped[manager] = [];
-                    }
+                    if (!grouped[manager]) grouped[manager] = [];
                     if (!grouped[manager].includes(line)) {
-                        grouped[manager].push(line);
+                       grouped[manager].push(line);
                     }
+                    processedLines.add(line);
+                    managerFound = true;
                 }
             }
         }
         
-        if(Object.keys(grouped).length===0){ 
-            empty.textContent='Совпадений нет'; 
-        } else {
-            const todayDate = new Date().toLocaleDateString('ru-RU');
-            const todayEntries = journal.filter(e => e.date.startsWith(todayDate));
-            const uniqueSearchIds = [...new Set(todayEntries.map(e => e.searchId))];
-            const shiftCount = uniqueSearchIds.length;
-            let shift;
-            if (shiftCount === 0) shift = '1-Смена';
-            else if (shiftCount === 1) shift = '2-Смена';
-            else shift = 'Открытая смена';
-            
-            const searchId = Date.now();
-            const now = new Date().toLocaleString('ru-RU', {
-                year: 'numeric', month: '2-digit', day: '2-digit',
-                hour: '2-digit', minute: '2-digit'
-            });
-            const newEntries = [];
+        // 2. Все, что не было обработано, становятся гостями
+        for (const line of lines) {
+            if (!processedLines.has(line)) {
+                guests.push(line);
+            }
+        }
+        
+        const now = new Date().toLocaleString('ru-RU', {
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit'
+        });
 
-            for(const [m,arr] of Object.entries(grouped)){
-                const h=document.createElement('div'); h.className='mgr'; h.textContent='Менеджер '+m+':'; out.appendChild(h);
-                const ol=document.createElement('ol');
-                const cleanedArr = arr.map(line => line.replace(/^\d+\.\s*/, ''));
-                cleanedArr.forEach(v=>{ 
-                    const li=document.createElement('li'); 
-                    li.textContent=v; 
-                    ol.appendChild(li); 
-                    newEntries.push({
+        // 3. Сохраняем гостей, если они есть
+        if (guests.length > 0) {
+            const newGuestEntries = guests.map(g => ({
+                id: Date.now() + Math.random(),
+                user: currentUser,
+                text: g,
+                date: now
+            }));
+            const updatedGuestList = [...guestList, ...newGuestEntries];
+            await saveGuestList(updatedGuestList);
+            await loadGuestList(); // Обновляем локальный список
+            showToast(`${guests.length} чел. добавлено в журнал гостей.`);
+        }
+
+        // 4. Обрабатываем найденных сотрудников
+        if (Object.keys(grouped).length === 0) {
+            if (guests.length === 0) empty.textContent = 'Совпадений нет';
+        } else {
+            const searchId = Date.now();
+            const newJournalEntries = [];
+            for (const [m, arr] of Object.entries(grouped)) {
+                const h = document.createElement('div'); h.className = 'mgr'; h.textContent = 'Менеджер ' + m + ':'; out.appendChild(h);
+                const ol = document.createElement('ol');
+                arr.forEach(v => {
+                    const li = document.createElement('li'); li.textContent = v; ol.appendChild(li);
+                    newJournalEntries.push({
                         id: Date.now() + Math.random(),
-                        user: currentUser,
-                        manager: m,
-                        employee: v,
-                        date: now,
-                        shift: shift,
+                        user: currentUser, manager: m, employee: v, date: now,
+                        shift: '1-Смена', // Будет определено позже
                         searchId: searchId
                     });
                 });
                 out.appendChild(ol);
             }
-            await addToJournal(newEntries);
-            copyWrap.style.display='block';
+            // Логика определения смены
+            const todayDate = new Date().toLocaleDateString('ru-RU');
+            const todaySearches = journal.filter(e => e.date.startsWith(todayDate)).map(e => e.searchId);
+            const shiftCount = new Set(todaySearches).size;
+            let shift = (shiftCount === 0) ? '1-Смена' : (shiftCount === 1) ? '2-Смена' : 'Открытая смена';
+            newJournalEntries.forEach(e => e.shift = shift);
+
+            await addToJournal(newJournalEntries);
+            copyWrap.style.display = 'block';
+
+            // 5. "Минусование" из списка на тренинг
+            if (trainingList.length > 0) {
+                const foundEmployeesText = Object.values(grouped).flat().join('\n');
+                let updatedTrainingList = [...trainingList];
+                let removedCount = 0;
+                
+                updatedTrainingList = updatedTrainingList.filter(fio => {
+                    if (foundEmployeesText.includes(fio)) {
+                        removedCount++;
+                        return false; // Удаляем из списка
+                    }
+                    return true;
+                });
+                
+                if (removedCount > 0) {
+                    await saveTrainingList(updatedTrainingList);
+                    showToast(`Отмечено в списке на тренинг: ${removedCount} чел.`);
+                }
+            }
         }
-        lastExport=grouped;
-        ta.value="";
+        
+        lastExport = grouped;
+        ta.value = "";
     }
     
+    // --- ФУНКЦИИ ЭКСПОРТА И КОПИРОВАНИЯ ---
     function exportSearch(){
         if(Object.keys(lastExport).length===0){ showToast("Нет данных для экспорта", true); return; }
         const ws_data=[];
@@ -663,7 +814,6 @@
 
     function exportJournal(){
         if(displayedJournal.length === 0){ showToast("Нет данных для экспорта по текущему фильтру", true); return; }
-
         const ws_data=[["Кто искал","Смена","Менеджер","Сотрудник / Магазин", "Дата", "Время"]];
         displayedJournal.forEach(entry => {
             const [date, time] = entry.date.split(',');
@@ -673,6 +823,16 @@
         const wb=XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb,ws,"Журнал");
         XLSX.writeFile(wb,`olma-journal-export.xlsx`);
+    }
+
+    function exportGuests() {
+        if (guestList.length === 0) { showToast("Журнал гостей пуст.", true); return; }
+        const ws_data = [["Запись", "Кто добавил", "Дата и время"]];
+        guestList.forEach(g => ws_data.push([g.text, g.user, g.date]));
+        const ws = XLSX.utils.aoa_to_sheet(ws_data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Гости");
+        XLSX.writeFile(wb, `olma-guests.xlsx`);
     }
 
     function clearJournal(){
@@ -701,6 +861,22 @@
         }
     }
 
+    // ===== НОВАЯ ФУНКЦИЯ УВЕДОМЛЕНИЯ О ТРЕНИНГЕ =====
+    function checkTrainingReminder() {
+        if (sessionStorage.getItem('trainingReminderShown')) return;
+        const now = new Date();
+        const isFriday = now.getDay() === 5; // 5 = Пятница
+        const isAfter5PM = now.getHours() >= 17;
+
+        if (isFriday && isAfter5PM && trainingList.length > 0) {
+            const remaining = trainingList.slice(0, 5).join('\n');
+            const message = `ВНИМАНИЕ!\n\nВ списке на тренинг остались необработанные сотрудники:\n\n${remaining}\n\n${trainingList.length > 5 ? `...и еще ${trainingList.length - 5}.` : ''}`;
+            alert(message);
+            sessionStorage.setItem('trainingReminderShown', 'true');
+        }
+    }
+
+    // ===== ОБНОВЛЕННЫЙ БЛОК ИНИЦИАЛИЗАЦИИ И ОБРАБОТЧИКОВ =====
     document.addEventListener("DOMContentLoaded", populateUserFilter);
 
     document.getElementById("btnStart").addEventListener("click", async () => {
@@ -709,6 +885,9 @@
             currentUser = userSelect.value;
             await loadDB(); 
             journal = await loadJournal(currentUser); 
+            await loadTrainingList(); // ДОБАВЛЕНО
+            await loadGuestList(); // ДОБАВЛЕНО
+            checkTrainingReminder(); // ДОБАВЛЕНО
             document.getElementById("welcomeOverlay").style.display = "none";
             document.getElementById("mainApp").style.display = "block";
         } else {
@@ -732,7 +911,6 @@
 
     document.getElementById("btnApplyFilter").addEventListener("click", async () => {
         const selectedUser = document.getElementById('filterUser').value;
-        
         let journalData = [];
         if (selectedUser === 'all') {
             const journalsRef = firestore.collection("journals");
@@ -790,6 +968,56 @@
         }
     });
 
+    // ===== НОВЫЕ ОБРАБОТЧИКИ ДЛЯ "ТРЕНИНГА" И "ГОСТЕЙ" =====
+    document.getElementById('btnTraining').addEventListener('click', () => {
+        renderTrainingList();
+        document.getElementById('trainingOverlay').style.display = 'flex';
+    });
+    document.getElementById('closeTraining').addEventListener('click', () => {
+        document.getElementById('trainingOverlay').style.display = 'none';
+    });
+    document.getElementById('btnUploadTrainingList').addEventListener('click', () => {
+        document.getElementById('uploadTrainingOverlay').style.display = 'flex';
+    });
+    document.getElementById('btnCancelUpload').addEventListener('click', () => {
+        document.getElementById('uploadTrainingOverlay').style.display = 'none';
+        document.getElementById('trainingListInput').value = '';
+    });
+    document.getElementById('btnClearTrainingList').addEventListener('click', () => {
+        showConfirm('Вы уверены, что хотите полностью очистить список на тренинг?', async () => {
+            await saveTrainingList([], true); // Очищаем и сбрасываем счетчик
+            renderTrainingList();
+        });
+    });
+    document.getElementById('btnSaveTrainingList').addEventListener('click', async () => {
+        const text = document.getElementById('trainingListInput').value.trim();
+        if (text) {
+            const newList = text.split('\n').map(line => line.trim()).filter(Boolean);
+            await saveTrainingList(newList, true); // Сохраняем и ставим флаг новой загрузки
+            renderTrainingList();
+            document.getElementById('uploadTrainingOverlay').style.display = 'none';
+            document.getElementById('trainingListInput').value = '';
+        } else {
+            showToast('Поле ввода пустое!', true);
+        }
+    });
+    
+    document.getElementById('btnGuests').addEventListener('click', () => {
+        renderGuestList();
+        document.getElementById('guestOverlay').style.display = 'flex';
+    });
+    document.getElementById('closeGuests').addEventListener('click', () => {
+        document.getElementById('guestOverlay').style.display = 'none';
+    });
+    document.getElementById('btnExportGuests').addEventListener('click', exportGuests);
+    document.getElementById('btnClearGuests').addEventListener('click', () => {
+        showConfirm('Вы уверены, что хотите полностью очистить журнал гостей?', async () => {
+            await saveGuestList([]);
+            await loadGuestList();
+            renderGuestList();
+            showToast("Журнал гостей очищен.");
+        });
+    });
 </script>
 </body>
 </html>
